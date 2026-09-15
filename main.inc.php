@@ -11,6 +11,26 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 2.4 - 15/09/2026
+    corrigé : les clés de traduction des messages de confirmation/erreur de restauration
+    .original contenaient un \n littéral (non interprété par PHP en guillemets simples), ce
+    qui empêchait toute traduction (renommées en clés courtes stables) — issue #2/PR #1 (Gvf63)
+    corrigé : conflit avec geo_tag_editor quand les deux plugins chargent Trumbowyg sur la même
+    page (le second chargement réinitialisait jQuery.trumbowyg et effaçait les traductions déjà
+    chargées par le premier) ; ajout d'une garde de chargement unique de la librairie, symétrique
+    dans les deux plugins
+    ajouté : support italien (plugin.lang.php + langue Trumbowyg it.min.js, dans les deux plugins)
+    corrigé : le texte du bouton "Enregistrement..." pendant la sauvegarde n'était jamais traduit
+    supprimé : webservice facetagwrite.clearLog (reste de mise au point, fonction jamais implémentée,
+    provoquait une erreur fatale si appelé) ; le système de log de debug reste activable manuellement
+    dans le code (voir commentaire en tête de fichier)
+    supprimé : 3 fichiers XML orphelins dans template/ (face_mpreg_template.xml, face_mwgrs_template.xml,
+    xmp_template.xml), reliquats de l'ancienne approche "template" d'écriture XMP abandonnée en v2.3,
+    non référencés par aucun code
+    corrigé : clé de traduction du bouton "Enregistrer" de la modale incohérente entre main.inc.php
+    (sans espace finale) et draw_faces.js/fichiers de langue (avec espace finale) -> le bouton
+    s'affichait toujours en français quelle que soit la langue de l'utilisateur
+
 version 2.3 - 18/08/2026
     version auto pour PEM piwigo & github
     ajouté .gitignore
@@ -228,7 +248,7 @@ function face_tag_write_load_scripts()
   // Définir les valeurs par défaut
   $save_original = isset($config['save_original']) ? $config['save_original'] : true;
   
-  // Choisir la langue Trumbowyg (fr/de/ru disponibles localement, en par défaut sinon)
+  // Choisir la langue Trumbowyg (fr/de/ru/it disponibles localement, en par défaut sinon)
   $piwigo_lang = isset($user['language']) ? $user['language'] : 'en_UK';
   $trumbowyg_lang = 'en';
   $trumbowyg_lang_script = '';
@@ -238,9 +258,24 @@ function face_tag_write_load_scripts()
     $trumbowyg_lang = 'de';
   } elseif (strpos($piwigo_lang, 'ru') === 0) {
     $trumbowyg_lang = 'ru';
+  } elseif (strpos($piwigo_lang, 'it') === 0) {
+    $trumbowyg_lang = 'it';
   }
   if ($trumbowyg_lang !== 'en') {
     $trumbowyg_lang_script = '<script src="' . FACETAGWRITE_PATH . 'js/vendor/trumbowyg/langs/' . $trumbowyg_lang . '.min.js"></script>';
+  }
+  
+  // Éviter le double chargement de la librairie Trumbowyg quand geo_tag_editor est aussi actif :
+  // le script core fait une affectation directe (jQuery.trumbowyg = {...}) et non un $.extend,
+  // donc une seconde exécution efface les traductions déjà chargées par l'autre plugin (issue #2).
+  $trumbowyg_shared_scripts = '';
+  if (!defined('TRUMBOWYG_CORE_LOADED')) {
+    define('TRUMBOWYG_CORE_LOADED', true);
+    $trumbowyg_shared_scripts = '
+  <script src="' . FACETAGWRITE_PATH . 'js/vendor/trumbowyg/trumbowyg.min.js"></script>
+  <script src="' . FACETAGWRITE_PATH . 'js/vendor/trumbowyg/plugins/trumbowyg.fontsize.min.js"></script>
+  <script src="' . FACETAGWRITE_PATH . 'js/vendor/trumbowyg/plugins/trumbowyg.fontfamily.min.js"></script>
+  <script src="' . FACETAGWRITE_PATH . 'js/vendor/trumbowyg/plugins/trumbowyg.colors.min.js"></script>';
   }
   
   $template->append('footer_elements', '
@@ -252,11 +287,8 @@ function face_tag_write_load_scripts()
   window.FaceTagTrumbowygSvgPath = "' . FACETAGWRITE_PATH . 'css/vendor/trumbowyg/icons.svg";
   window.FaceTagTrumbowygLang = "' . $trumbowyg_lang . '";
   </script>
-  <script src="' . FACETAGWRITE_PATH . 'js/vendor/trumbowyg/trumbowyg.min.js"></script>
+  ' . $trumbowyg_shared_scripts . '
   ' . $trumbowyg_lang_script . '
-  <script src="' . FACETAGWRITE_PATH . 'js/vendor/trumbowyg/plugins/trumbowyg.fontsize.min.js"></script>
-  <script src="' . FACETAGWRITE_PATH . 'js/vendor/trumbowyg/plugins/trumbowyg.fontfamily.min.js"></script>
-  <script src="' . FACETAGWRITE_PATH . 'js/vendor/trumbowyg/plugins/trumbowyg.colors.min.js"></script>
   <script src="' . FACETAGWRITE_PATH . 'template/draw_faces.js"></script>
   ');
 }
@@ -396,16 +428,6 @@ add_event_handler('ws_add_methods', 'face_tag_write_ws_methods');
 function face_tag_write_ws_methods($arr)
 {
   $service = &$arr[0];
-
-  //-------------------------------
-  $service->addMethod(
-  'facetagwrite.clearLog',
-  'face_tag_write_clear_log',
-  array(),
-  'Clear the debug log file',
-  null,
-  array('admin_only' => true)
-  );
 
   //----------------------------
   $service->addMethod(
@@ -1298,7 +1320,8 @@ function facetag_ws_get_translations($params, &$service)
     'Description' => l10n('Description'),
     'Lecture seule : mise en forme HTML complexe détectée, non modifiable ici.' => l10n('Lecture seule : mise en forme HTML complexe détectée, non modifiable ici.'),
     'Annuler' => l10n('Annuler'),
-    'Enregistrer' => l10n('Enregistrer'),
+    'Enregistrer ' => l10n('Enregistrer '),
+    'Enregistrement...' => l10n('Enregistrement...'),
     'existant' => l10n('existant'),
     'Supprimer' => l10n('Supprimer'),
     'Nommer la personne' => l10n('Nommer la personne'),
@@ -1315,7 +1338,7 @@ function facetag_ws_get_translations($params, &$service)
     'Taguer les visages' => l10n('Taguer les visages'),
     'Aucun visage à effacer' => l10n('Aucun visage à effacer'),
     '✅ Fichier original restauré avec succès !' => l10n('✅ Fichier original restauré avec succès !'),
-    '❌ Aucun fichier .original trouvé à restaurer.\n\nLe fichier original n\'existe que si vous avez déjà enregistré des tags.' => l10n('❌ Aucun fichier .original trouvé à restaurer.\n\nLe fichier original n\'existe que si vous avez déjà enregistré des tags.'),
+    'error_no_original_file' => l10n('error_no_original_file'),
     '❌ Accès refusé. Vous n\'avez pas les permissions nécessaires.' => l10n('❌ Accès refusé. Vous n\'avez pas les permissions nécessaires.'),
     '✅ Visages enregistrés avec succès !' => l10n('✅ Visages enregistrés avec succès !'),
     'Visages: ' => l10n('Visages: '),
@@ -1323,7 +1346,7 @@ function facetag_ws_get_translations($params, &$service)
     'Backup: Déjà existant' => l10n('Backup: Déjà existant'),
     'Voulez-vous vraiment supprimer tous les tags de visages de cette image ?' => l10n('Voulez-vous vraiment supprimer tous les tags de visages de cette image ?'),
     'Êtes-vous sûr de vouloir effacer tous les rectangles ?' => l10n('Êtes-vous sûr de vouloir effacer tous les rectangles ?'),
-    '⚠️ ATTENTION ⚠️\n\nCette action va :\n• Restaurer le fichier .original \n• Régénérer les miniatures\n\nÊtes-vous sûr de vouloir continuer ?' => l10n('⚠️ ATTENTION ⚠️\n\nCette action va :\n• Restaurer le fichier .original \n• Régénérer les miniatures\n\nÊtes-vous sûr de vouloir continuer ?'),
+    'confirm_restore_original' => l10n('confirm_restore_original'),
     'Télécharger JPG' => l10n('Télécharger JPG'),
     'Télécharger l\'image avec les rectangles visibles' => l10n('Télécharger l\'image avec les rectangles visibles'),
     'Aucun visage tagué à télécharger' => l10n('Aucun visage tagué à télécharger'),

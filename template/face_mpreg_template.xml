@@ -1,4 +1,0 @@
-<rdf:li rdf:parseType='Resource'>
-      <MPReg:PersonDisplayName>{{NAME}}</MPReg:PersonDisplayName>
-      <MPReg:Rectangle>{{X}}, {{Y}}, {{W}}, {{H}}</MPReg:Rectangle>
-     </rdf:li>

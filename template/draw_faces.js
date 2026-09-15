@@ -453,7 +453,7 @@ if (isDescriptionReadonly) {
         //console.log('📄 JSON:', JSON.stringify(facesData));
         //*console.log('🌐 URL:', saveUrl);
         
-        $(this).prop('disabled', true).text('Enregistrement...');
+        $(this).prop('disabled', true).text(_('Enregistrement...'));
         //console.log("🔒 Bouton désactivé");
         
         // Créer un FormData pour envoyer en POST
@@ -584,7 +584,7 @@ error: function(xhr, status, error) {
 //-----------------------------------------------------------------------------------------------------      
 // Événement restaurer l'original
       $('#facetag-restore-original').click(function() {
-       if (!confirm(_('⚠️ ATTENTION ⚠️\n\nCette action va :\n• Restaurer le fichier .original \n• Régénérer les miniatures\n\nÊtes-vous sûr de vouloir continuer ?'))) {
+       if (!confirm(_('confirm_restore_original'))) {
       return; 
       }
         
@@ -652,7 +652,7 @@ error: function(xhr, status, error) {
 
             // Afficher le message d'erreur spécifique
             if (xhr.status === 404) {
-              alert(_('❌ Aucun fichier .original trouvé à restaurer.\n\nLe fichier original n\'existe que si vous avez déjà enregistré des tags.'));
+              alert(_('error_no_original_file'));
             } else if (xhr.status === 403) {
               alert(_('❌ Accès refusé. Vous n\'avez pas les permissions nécessaires.'));
             } else {

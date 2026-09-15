@@ -15,6 +15,7 @@ $lang['Description'] = 'Description';
 $lang['Lecture seule : mise en forme HTML complexe détectée, non modifiable ici.'] = 'Read-only: complex HTML formatting detected, not editable here.';
 $lang['Annuler'] = 'Cancel';
 $lang['Enregistrer '] = 'Save';
+$lang['Enregistrement...'] = 'Saving...';
 
 // éditeur liste visages
 $lang['existant'] = 'existing';
@@ -41,7 +42,7 @@ $lang['Taguer les visages'] = 'Tag faces';
 // alertes du js
 $lang['Aucun visage à effacer'] = 'No faces to clear';
 $lang['✅ Fichier original restauré avec succès !'] = '✅ Original file restored successfully!';
-$lang['❌ Aucun fichier .original trouvé à restaurer.\n\nLe fichier original n\'existe que si vous avez déjà enregistré des tags.'] = '❌ No .original file found to restore.\n\nThe original file only exists if you have already saved tags.';
+$lang['error_no_original_file'] = '❌ No .original file found to restore.\n\nThe original file only exists if you have already saved tags.';
 $lang['❌ Accès refusé. Vous n\'avez pas les permissions nécessaires.'] = '❌ Access denied. You do not have the necessary permissions.';
 
 $lang['✅ Visages enregistrés avec succès !'] = '✅ Faces saved successfully!';
@@ -51,7 +52,7 @@ $lang['Backup: Déjà existant'] = 'Backup: Already exists';
 
 $lang['Voulez-vous vraiment supprimer tous les tags de visages de cette image ?'] = 'Do you really want to delete all face tags from this image?';
 $lang['Êtes-vous sûr de vouloir effacer tous les rectangles ?'] = 'Are you sure you want to clear all rectangles?';
-$lang['⚠️ ATTENTION ⚠️\n\nCette action va :\n• Restaurer le fichier .original \n• Régénérer les miniatures\n\nÊtes-vous sûr de vouloir continuer ?'] = '⚠️ WARNING ⚠️\n\nThis action will:\n• Restore the .original file\n• Regenerate thumbnails\n\nAre you sure you want to continue?';
+$lang['confirm_restore_original'] = '⚠️ WARNING ⚠️\n\nThis action will:\n• Restore the .original file\n• Regenerate thumbnails\n\nAre you sure you want to continue?';
 
 // fichier jpg tagué
 $lang['Télécharger JPG'] = 'Download JPG';
