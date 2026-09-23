@@ -1434,7 +1434,7 @@ function updateFacesList() {
   $list.empty();
   
   if (faces.length === 0) {
-    $list.html('<p>Aucun visage tagué</p>');
+    $list.html(`<p>${_('Aucun visage tagué')}</p>`);
     return;
   }
   
