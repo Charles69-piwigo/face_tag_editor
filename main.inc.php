@@ -1319,7 +1319,7 @@ function facetag_add_ws_methods($arr)
 
 function facetag_ws_get_translations($params, &$service)
 {
-  
+  load_language('plugin.lang',FACETAGWRITE_PATH);
   // Créer le tableau JavaScript
   $translations = array(
     'Éditeur de visages' => l10n('Éditeur de visages'),
