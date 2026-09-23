@@ -553,6 +553,7 @@ error: function(xhr, status, error) {
             }
             
             //*alert('❌ Erreur : ' + errorMsg);
+            alert("⚠️ ERROR⚠️ : " + errorMsg);
 
           },
           complete: function() {
