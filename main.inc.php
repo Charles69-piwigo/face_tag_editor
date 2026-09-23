@@ -11,6 +11,13 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 2.4a - 22/09/2026
+    corrigé : un nom de visage contenant une apostrophe (ex: "Gigi D'Alessio") ne correspondait
+    jamais au tag Piwigo existant (nouveau tag orphelin recréé à chaque sauvegarde) car
+    tag_id_from_tag_name() du cœur interpole le nom dans une requête SQL sans l'échapper ; le
+    cœur compense systématiquement en pré-échappant avec addslashes() avant l'appel (voir
+    get_sync_metadata()), ce que le plugin ne faisait pas — issue GitHub
+
 version 2.4 - 15/09/2026
     corrigé : les clés de traduction des messages de confirmation/erreur de restauration
     .original contenaient un \n littéral (non interprété par PHP en guillemets simples), ce
@@ -1069,7 +1076,14 @@ function face_tag_write_regenerate_metadata($image_id, $faces = array(), $descri
     $tag_ids = array();
     foreach ($names as $name)
     {
-      $tag_ids[] = tag_id_from_tag_name($name);
+      // tag_id_from_tag_name() interpole le nom dans une requête SQL sans
+      // l'échapper (bug connu du cœur) : tous les appelants du cœur
+      // pré-échappent avec addslashes() avant l'appel (voir
+      // get_sync_metadata() dans admin/include/functions_metadata.php), on
+      // fait de même ici sinon un nom avec apostrophe (ex: "Gigi D'Alessio")
+      // ne correspond jamais au tag existant et un doublon est créé à chaque
+      // sauvegarde.
+      $tag_ids[] = tag_id_from_tag_name(addslashes($name));
     }
     $tag_ids = array_unique($tag_ids);
 
@@ -1213,7 +1227,8 @@ function face_tag_write_register_facetag_person_tags($image_id, $faces)
 
   foreach ($names as $name)
   {
-    $tag_id = tag_id_from_tag_name($name);
+    // Même pré-échappement que dans face_tag_write_regenerate_metadata() ci-dessus.
+    $tag_id = tag_id_from_tag_name(addslashes($name));
 
     pwg_query('
 INSERT INTO ' . $person_tags_table . ' (tag_id, is_face_tag, source, example_image_id, updated_at)
