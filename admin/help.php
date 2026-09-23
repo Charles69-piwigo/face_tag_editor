@@ -1,6 +1,7 @@
 <?php
 defined('FACETAGWRITE_PATH') or die('Hacking attempt!');
 
+load_language('plugin.lang',FACETAGWRITE_PATH);
 
 // Afficher le tabsheet
 facetageditor_admin_tabsheet('help');
