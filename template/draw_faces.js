@@ -8,7 +8,7 @@
     
     // Dans la console du navigateur
    // console.log($('link[href*="font-awesome"]').attr('href'));
-    console.log('Face Tag Editor: Script chargé )');
+    console.log('Face Tag Editor: Script chargé');
     
     var canvas = null;
     var currentRect = null;
@@ -553,10 +553,11 @@ error: function(xhr, status, error) {
             }
             
             //*alert('❌ Erreur : ' + errorMsg);
+            alert("⚠️ ERROR⚠️ : " + errorMsg);
 
           },
           complete: function() {
-            $('#facetag-save-xmp').prop('disabled', false).text('💾 Enregistrer ');
+            $('#facetag-save-xmp').prop('disabled', false).text('💾 ' + _('Enregistrer '));
           }
         });
       });
@@ -1434,7 +1435,7 @@ function updateFacesList() {
   $list.empty();
   
   if (faces.length === 0) {
-    $list.html('<p>Aucun visage tagué</p>');
+    $list.html(`<p>${_('Aucun visage tagué')}</p>`);
     return;
   }
   
