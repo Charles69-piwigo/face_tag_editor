@@ -11,6 +11,19 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 2.4b - 23/09/2026
+    corrigé (PR #5, Gvf63) : le bouton "Enregistrer" repassait en dur après une sauvegarde et
+    la liste "Aucun visage tagué" n'était pas traduite dans updateFacesList() — les clés de
+    traduction existaient déjà mais ces deux endroits ne les utilisaient pas
+    corrigé (PR #5, Gvf63) : load_language() manquant dans admin/help.php (présent dans les
+    autres pages admin du plugin)
+    corrigé (PR #5, Gvf63) : typo dans un console.log de démarrage
+    corrigé : $.ajax() de sauvegarde XMP avait deux clés error: dupliquées dans le même objet
+    (la seconde écrasait silencieusement la première en JS) — la première contenait la logique
+    de récupération "fausse erreur HTTP mais succès réel côté serveur" (stat:ok), qui ne
+    s'exécutait donc jamais ; fusionné en un seul handler qui garde cette récupération et
+    l'alerte utilisateur ajoutée par le PR #5
+
 version 2.4a - 22/09/2026
     corrigé : un nom de visage contenant une apostrophe (ex: "Gigi D'Alessio") ne correspondait
     jamais au tag Piwigo existant (nouveau tag orphelin recréé à chaque sauvegarde) car

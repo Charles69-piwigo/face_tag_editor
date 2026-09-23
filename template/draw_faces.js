@@ -513,48 +513,31 @@ if (data.stat === 'ok' || result.stat === 'ok') {
   }
 },
 
-error: function(xhr, status, error) {
-  console.error('361-❌ ERREUR AJAX');
-            console.error('Status:', status);
-            console.error('Error:', error);
-            console.error('Response:', xhr.responseText);
-            console.error('Status Code:', xhr.status);
-  
-  // Vérifier si c'est une fausse erreur (succès en réalité)
-  try {
-    var response = JSON.parse(xhr.responseText);
-    if (response.stat === 'ok') {
-      console.error('✅ Enregistré (malgré erreur HTTP)');
-      closeModal();
-      location.reload();
-      return;
-    }
-  } catch(e) {}
-  
-
-},
-
+          // Un seul handler error: deux blocs dupliqués coexistaient ici (le second écrasait
+          // silencieusement le premier dans l'objet $.ajax), ce qui désactivait la récupération
+          // "fausse erreur HTTP" ci-dessous — fusionnés en un seul bloc qui fait les deux.
           error: function(xhr, status, error) {
-            console.error('382 ❌ ERREUR AJAX');
+            console.error('❌ ERREUR AJAX');
             console.error('Status:', status);
             console.error('Error:', error);
             console.error('Response:', xhr.responseText);
             console.error('Status Code:', xhr.status);
 
-            var errorMsg = error;
+            var response = null;
             try {
-              var response = JSON.parse(xhr.responseText);
-              if (response.message) {
-                errorMsg = response.message;
-              }
-            } catch(e) {
-              // Si pas de JSON, utiliser responseText brut
-              errorMsg = xhr.responseText || error;
-            }
-            
-            //*alert('❌ Erreur : ' + errorMsg);
-            alert("⚠️ ERROR⚠️ : " + errorMsg);
+              response = JSON.parse(xhr.responseText);
+            } catch(e) {}
 
+            // Vérifier si c'est une fausse erreur (succès en réalité)
+            if (response && response.stat === 'ok') {
+              console.error('✅ Enregistré (malgré erreur HTTP)');
+              closeModal();
+              location.reload();
+              return;
+            }
+
+            var errorMsg = (response && response.message) ? response.message : (xhr.responseText || error);
+            alert("⚠️ ERROR⚠️ : " + errorMsg);
           },
           complete: function() {
             $('#facetag-save-xmp').prop('disabled', false).text('💾 ' + _('Enregistrer '));
