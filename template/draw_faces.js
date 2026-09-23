@@ -556,7 +556,7 @@ error: function(xhr, status, error) {
 
           },
           complete: function() {
-            $('#facetag-save-xmp').prop('disabled', false).text('💾 Enregistrer ');
+            $('#facetag-save-xmp').prop('disabled', false).text('💾 ' + _('Enregistrer '));
           }
         });
       });
