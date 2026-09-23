@@ -8,7 +8,7 @@
     
     // Dans la console du navigateur
    // console.log($('link[href*="font-awesome"]').attr('href'));
-    console.log('Face Tag Editor: Script chargé )');
+    console.log('Face Tag Editor: Script chargé');
     
     var canvas = null;
     var currentRect = null;
