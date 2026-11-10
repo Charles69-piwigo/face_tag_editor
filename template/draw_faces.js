@@ -1140,8 +1140,8 @@ canvas.on('object:scaling', function(e) {
   var obj = e.target;
   if (obj.label) {
     obj.label.set({
-      left: obj.left * obj.scaleX,
-      top: (obj.top * obj.scaleY) + (obj.height * obj.scaleY) + 5 // En dessous
+      left: obj.left,
+      top: obj.top + (obj.height * obj.scaleY) + 5 // En dessous
     });
   }
 });
