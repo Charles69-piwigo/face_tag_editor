@@ -78,6 +78,13 @@ class FaceTagMetadataWriterSimple
    */
   public function writeMetadata($image_path, $faces, $merged_data = null, $description = null, $description_provided = true)
   {
+    // JPEG : réécriture des seuls segments XMP / IPTC, sans ré-encoder l'image (v2.4b.2).
+    // Autres formats : ancienne voie Imagick, inchangée.
+    $jpeg_data = @file_get_contents($image_path);
+    if ($jpeg_data !== false && substr($jpeg_data, 0, 2) === "\xFF\xD8") {
+      return $this->writeMetadataJpeg($image_path, $jpeg_data, $faces, $merged_data, $description, $description_provided);
+    }
+
     try {
       $imagick = ImagickWrapper::load($image_path);
 
@@ -132,6 +139,65 @@ class FaceTagMetadataWriterSimple
       // d'etre mises a jour.
       $this->stripOrphanedExtendedXmp($image_path);
 
+      return array('success' => true);
+
+    } catch (Exception $e) {
+      return array('success' => false, 'error' => $e->getMessage());
+    }
+  }
+
+  /**
+   * Écriture JPEG par segments (voir lib/jpeg_segments.php) : même fusion XMP et même IPTC que la
+   * voie Imagick, mais les données de l'image ne sont jamais ré-encodées. Écrit dans un fichier
+   * voisin puis renomme ; n'écrit rien si le contenu ne change pas.
+   */
+  private function writeMetadataJpeg($image_path, $data, $faces, $merged_data, $description, $description_provided)
+  {
+    try {
+      $meta = facetagwrite_jpeg_read_meta($data);
+      if ($meta === null) {
+        return array('success' => false, 'error' => 'JPEG structure not supported');
+      }
+
+      $person_names = $this->extractPersonNames($faces);
+      if ($merged_data) {
+        $all_subjects = $merged_data['all_subjects'];
+        $all_hierarchical = $merged_data['all_hierarchical'];
+        $all_tagslist = $merged_data['all_tagslist'];
+        $all_catalogsets = $merged_data['all_catalogsets'];
+      } else {
+        $all_subjects = $person_names;
+        $all_hierarchical = array_map(function($n) { return 'Personnes|' . $n; }, $person_names);
+        $all_tagslist = array_map(function($n) { return 'Personnes/' . $n; }, $person_names);
+        $all_catalogsets = array_map(function($n) { return 'Personnes|' . $n; }, $person_names);
+      }
+
+      $xmp = $this->mergeXmp($meta['xmp'], $faces, $meta['width'], $meta['height'], $all_subjects, $all_hierarchical, $all_tagslist, $all_catalogsets);
+
+      $iptc = null;
+      if ($this->config['write_fields']['iptc_keywords']) {
+        $iptc = $this->buildIptcData($meta['iptc'], $all_subjects, $description, $description_provided);
+      }
+
+      $out = facetagwrite_jpeg_write_meta($data, $xmp, $iptc);
+      if ($out === $data) {
+        return array('success' => true);
+      }
+
+      $tmp = $image_path . '.facetag_tmp';
+      if (@file_put_contents($tmp, $out) !== strlen($out)) {
+        @unlink($tmp);
+        return array('success' => false, 'error' => 'Cannot write temporary file');
+      }
+      if (!@rename($tmp, $image_path)) {
+        // Windows / partages réseau : rename() ne remplace pas toujours un fichier existant
+        if (@file_put_contents($image_path, $out) !== strlen($out)) {
+          @unlink($tmp);
+          return array('success' => false, 'error' => 'Cannot write file');
+        }
+        @unlink($tmp);
+      }
+      clearstatcache(true, $image_path);
       return array('success' => true);
 
     } catch (Exception $e) {
@@ -657,6 +723,15 @@ class FaceTagMetadataWriterSimple
       $iptc_profile = false;
     }
 
+    $imagick->setImageProfile('iptc', $this->buildIptcData($iptc_profile, $keywords, $description, $description_provided));
+  }
+
+  /**
+   * Nouveau bloc IPTC binaire : mots-clés (2:25) remplacés, description (2:120) selon
+   * $description_provided, le reste conservé (commun aux voies Imagick et JPEG par segments).
+   */
+  private function buildIptcData($iptc_profile, $keywords, $description = null, $description_provided = true)
+  {
     if ($iptc_profile) {
       $iptc_data = $this->parseIptcProfile($iptc_profile);
     } else {
@@ -675,8 +750,7 @@ class FaceTagMetadataWriterSimple
       }
     }
 
-    $new_profile = $this->buildIptcProfile($iptc_data);
-    $imagick->setImageProfile('iptc', $new_profile);
+    return $this->buildIptcProfile($iptc_data);
   }
 
   /**

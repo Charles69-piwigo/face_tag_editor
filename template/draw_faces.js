@@ -16,6 +16,7 @@
     var imageId = null;
     var imageSrc = null;
     var saveUrl = null;
+    var pwgToken = '';                  // 2.4b.5 : jeton de session exigé par saveXMP / restoreOriginal
     var fabricLoaded = false;
     // Variables partagées pour stocker les XMP (comme face_tag)
     var xmpData = null;
@@ -218,6 +219,7 @@ $(document).on('click', '#facetag-open-editor', async function(e) {
   imageId = $btn.data('image-id');
   imageSrc = $btn.data('image-src');
   saveUrl = $btn.data('save-url');
+  pwgToken = $btn.data('pwg-token') || '';
   // Lire hasOriginal depuis le bouton du DOM à CHAQUE fois
   hasOriginal = $btn.data('has-original') === 'true' || $btn.data('has-original') === true;
   currentDescription = $btn.data('description') || '';
@@ -459,6 +461,7 @@ if (isDescriptionReadonly) {
         // Créer un FormData pour envoyer en POST
         var formData = new FormData();
         formData.append('image_id', imageId);
+        formData.append('pwg_token', pwgToken);
         formData.append('faces', JSON.stringify(facesData));
         // Ne pas envoyer la description si elle est en lecture seule : le backend garde alors
         // la valeur existante en base et ne touche pas au tag IPTC (voir main.inc.php).
@@ -578,6 +581,7 @@ if (data.stat === 'ok' || result.stat === 'ok') {
         
         var formData = new FormData();
         formData.append('image_id', imageId);
+        formData.append('pwg_token', pwgToken);
         formData.append('action', 'restore');
         
         $.ajax({
@@ -1131,7 +1135,7 @@ canvas.on('object:moving', function(e) {
   if (obj.label) {
     obj.label.set({
       left: obj.left,
-      top: obj.top + obj.height + 5 // En dessous au lieu de au-dessus
+      top: obj.top + (obj.height * obj.scaleY) + 5 // En dessous (hauteur à l'échelle, sinon le libellé saute après un redimensionnement)
     });
   }
 });
@@ -1211,6 +1215,48 @@ canvas.on('object:modified', function(e) {
     }
     
     // ==================== DIALOGUE POUR NOMMER ====================
+    // ==================== NOM DÉJÀ UTILISÉ COMME TAG ORDINAIRE (v2.4b.4) ====================
+    // Avant de valider un nom de visage, demande au serveur si ce nom existe déjà comme tag
+    // ordinaire (posé sur des photos, absent du registre des visages) ; si oui, confirmation.
+    // Un nom déjà porté par un autre cadre de cette photo n'est pas revérifié. En cas d'erreur
+    // réseau, on n'empêche rien.
+    var checkingName = false;
+    function checkFaceName(name, onAccept) {
+      var lower = name.toLowerCase();
+      if (faces.some(f => f.name && f.name.toLowerCase() === lower)) {
+        onAccept();
+        return;
+      }
+      if (checkingName) return;
+      checkingName = true;
+      $.ajax({
+        url: saveUrl.replace('facetagwrite.saveXMP', 'facetagwrite.checkName'),
+        type: 'GET',
+        data: { name: name, image_id: imageId },
+        dataType: 'json'
+      }).done(function(data) {
+        checkingName = false;
+        var r = data && data.result ? data.result : null;
+        if (!r || !r.warn) {
+          onAccept();
+          return;
+        }
+        var msg = _('confirm_face_name_is_tag')
+          .replace('{name}', name)
+          .replace('{count}', r.count);
+        if (r.paths && r.paths.length > 0) {
+          msg += '\n' + _('confirm_face_name_is_tag_path').replace('{path}', r.paths.join(', '));
+        }
+        msg += '\n\n' + _('confirm_face_name_is_tag_question');
+        if (confirm(msg)) {
+          onAccept();
+        }
+      }).fail(function() {
+        checkingName = false;
+        onAccept();
+      });
+    }
+
     function promptForName(rect) {
       var existingNames = faces.map(f => f.name).filter((v, i, a) => a.indexOf(v) === i);
 
@@ -1245,6 +1291,7 @@ canvas.on('object:modified', function(e) {
         
 //*console.log("✅ Nom valide, ajout du label et sauvegarde...");
 
+checkFaceName(name, function() {
 try {
   addLabelToRect(rect, name);
   saveFaceData(rect, name);
@@ -1255,6 +1302,7 @@ try {
 }
 
 closeNameModal();
+});
       });
       
       $('#facetag-name-cancel').click(function() {
@@ -1312,6 +1360,7 @@ var renameModal = `
           return;
         }
 
+        checkFaceName(newName, function() {
         // Mettre à jour le nom du visage
         faces[faceIndex].name = newName;
 
@@ -1326,6 +1375,7 @@ var renameModal = `
 
         //*console.log("✅ Visage renommé avec succès");
         closeRenameModal();
+        });
       });
 
       $('#facetag-rename-cancel').click(function() {

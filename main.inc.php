@@ -11,6 +11,37 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 2.5 - 10/11/2026  (regroupe 2.4b.1 à 2.4b.5)
+    sécurité (2.4b.5) : les webservices getXMP, saveXMP, restoreOriginal et checkName ne
+    vérifiaient aucun droit (l'option admin_status utilisée n'existe pas dans Piwigo et était
+    ignorée ; seul le bouton était masqué) : n'importe qui pouvait réécrire ou restaurer une photo
+    en appelant ws.php directement ; chaque fonction contrôle maintenant elle-même : admin, ou
+    membre du groupe FaceTag autorisé sur cet album (can_user_tag_image) et qui voit la photo
+    (albums interdits, niveau de confidentialité) ; saveXMP et restoreOriginal exigent en plus le
+    pwg_token de la session (anti-CSRF) et la méthode POST ; getFaces : photo visible exigée
+    corrigé (2.4b.2) : chaque enregistrement des visages ré-encodait toute l'image JPEG
+    (Imagick::writeImage() ou convert externe : perte de qualité cumulative) ; pour un JPEG, seuls
+    le segment XMP et le bloc IPTC (APP13) sont maintenant remplacés, les autres segments et les
+    données de l'image sont recopiés octet pour octet (vérifié avant écriture), condensé IPTC
+    recalculé s'il existe, fichier voisin puis renommage (lib/jpeg_segments.php) ; autres formats :
+    ancienne voie Imagick inchangée
+    corrigé (2.4b.1) : un nom de visage restait pour toujours dans le registre facetag_person_tags
+    après la suppression ou le renommage de son cadre (cas réel : cadre "Arak" dessiné sur un
+    chien puis supprimé, le tag FAUNE|Chiens famille|Arak restait caché du nuage de tags et de
+    tag_manager) ; à l'enregistrement, chaque nom disparu de la photo est retiré du registre
+    (ligne supprimée) si plus aucune autre photo portant ce tag n'a de cadre de ce nom (lecture
+    du seul segment XMP, 200 photos au plus, sinon ligne gardée) ; lignes 'manual' jamais touchées
+    ajouté (2.4b.4) : avant de valider un nom de visage (création ou renommage), la modale vérifie
+    s'il existe déjà comme tag ordinaire (posé sur des photos, absent du registre des visages) et
+    demande confirmation en indiquant le nombre de photos et, si la photo le porte, son chemin
+    (ex: FAUNE|Chiens famille|Arak) ; webservice facetagwrite.checkName en lecture seule (base
+    + segment XMP de la photo ouverte) ; rien n'est interdit, une erreur réseau ne bloque pas
+    corrigé (2.4b.3, PR #6 Gvf63) : pendant le redimensionnement d'un cadre, le nom s'éloignait
+    du cadre (position multipliée par l'échelle, alors que left/top de Fabric.js n'en dépendent
+    pas) ; en déplaçant un cadre déjà redimensionné, le nom revenait à la hauteur d'origine du
+    cadre (hauteur sans l'échelle dans object:moving)
+    ajouté : README.md (français / anglais)
+
 version 2.4b - 23/09/2026
     corrigé (PR #5, Gvf63) : le bouton "Enregistrer" repassait en dur après une sauvegarde et
     la liste "Aucun visage tagué" n'était pas traduite dans updateFacesList() — les clés de
@@ -204,6 +235,7 @@ require_once(FACETAGWRITE_PATH . 'lib/editor_xmp_ex.php');
 
   // Charger les classes
 require_once(FACETAGWRITE_PATH . 'lib/imagick_wrapper.php');
+require_once(FACETAGWRITE_PATH . 'lib/jpeg_segments.php');
 require_once(FACETAGWRITE_PATH . 'lib/metadata_writer.php');
 require_once(FACETAGWRITE_PATH . 'lib/metadata_merger.php');
 require_once(FACETAGWRITE_PATH . 'lib/file_resolver.php');
@@ -356,6 +388,65 @@ function face_tag_write_check_access()
   return false;
 }
 
+// ==================== CONTRÔLE DES DROITS DANS LES WEBSERVICES ====================  V2.4b.5
+/**
+ * Indique si l'utilisateur courant voit la photo (albums interdits et niveau de confidentialité).
+ */
+function face_tag_write_image_visible($image_id)
+{
+  $query = '
+SELECT 1
+  FROM ' . IMAGES_TABLE . ' AS i
+  INNER JOIN ' . IMAGE_CATEGORY_TABLE . ' AS ic ON ic.image_id = i.id
+  WHERE i.id = ' . intval($image_id) . '
+  ' . get_sql_condition_FandF(
+        array('forbidden_categories' => 'ic.category_id', 'visible_images' => 'i.id'),
+        'AND'
+      ) . '
+  LIMIT 1
+;';
+  return pwg_db_num_rows(pwg_query($query)) > 0;
+}
+
+/**
+ * Contrôle serveur d'un webservice du plugin (le masquage du bouton ne protège rien) :
+ * admin/webmestre, ou membre du groupe FaceTag autorisé sur cette photo et qui la voit.
+ * Avec $need_token, le pwg_token de la session est exigé (écritures, contre les appels CSRF).
+ *
+ * @return PwgError|null null si l'accès est accordé
+ */
+function face_tag_write_ws_guard($params, $need_token)
+{
+  global $user;
+
+  if ($need_token
+      && (empty($params['pwg_token']) || $params['pwg_token'] !== get_pwg_token()))
+  {
+    return new PwgError(403, 'Invalid security token');
+  }
+
+  if (is_admin())
+  {
+    return null;
+  }
+
+  $image_id = empty($params['image_id']) ? 0 : intval($params['image_id']);
+  if (is_a_guest() || empty($user['id']) || $image_id <= 0)
+  {
+    return new PwgError(401, 'Access denied');
+  }
+
+  include_once(FACETAGWRITE_PATH . 'lib/rights_manager.php');
+  if (!user_in_facetag_group($user['id'])
+      || !can_user_tag_image($user['id'], $image_id)
+      || !face_tag_write_image_visible($image_id))
+  {
+    return new PwgError(403, 'Access denied');
+  }
+
+  return null;
+}
+
 //---------------------------------------------------------------------------
 function face_tag_write_add_button()
 {
@@ -396,6 +487,7 @@ function face_tag_write_add_button()
   $image_url = trigger_change('get_original_url', $image_url, $src_image);
 
   $save_url = get_root_url() . 'ws.php?format=json&method=facetagwrite.saveXMP';
+  $pwg_token = get_pwg_token();   // 2.4b.5 : exigé par saveXMP / restoreOriginal
   
   // Vérifier si le fichier de backup .original existe
   $real_local_path = face_tag_write_resolve_path($row['path']);
@@ -412,6 +504,7 @@ function face_tag_write_add_button()
        data-image-id="' . $picture['current']['id'] . '"
        data-image-src="' . $image_url . '"
        data-save-url="' . $save_url . '"
+       data-pwg-token="' . $pwg_token . '"
        data-has-original="' . $has_original . '"
        data-description="' . htmlspecialchars($row['comment'] ?? '', ENT_QUOTES, 'UTF-8') . '"
        data-description-is-readonly="' . ($description_is_readonly ? 'true' : 'false') . '"
@@ -430,6 +523,7 @@ function face_tag_write_add_button()
          data-image-id="' . $picture['current']['id'] . '"
          data-image-src="' . $image_url . '"
          data-save-url="' . $save_url . '"
+         data-pwg-token="' . $pwg_token . '"
          data-has-original="' . $has_original . '"
          data-description="' . htmlspecialchars($row['comment'] ?? '', ENT_QUOTES, 'UTF-8') . '"
        data-description-is-readonly="' . ($description_is_readonly ? 'true' : 'false') . '"
@@ -458,10 +552,22 @@ function face_tag_write_ws_methods($arr)
   ),
   'Récupère les faces déjà parsées d\'une image',
   null,
-  array('admin_status' => ACCESS_GUEST)
+  array()   // 2.4b.5 : admin_status n'existe pas dans Piwigo ; photo visible exigée dans la fonction
 );
 
   
+  $service->addMethod(
+    'facetagwrite.checkName',
+    'face_tag_write_ws_check_name',
+    array(
+      'name' => array('default' => null),
+      'image_id' => array('default' => null, 'type' => WS_TYPE_INT),
+    ),
+    'Indique si un nom de visage existe déjà comme tag ordinaire (lecture seule)',
+    null,
+    array()   // droits vérifiés dans la fonction (face_tag_write_ws_guard)
+  );
+
   $service->addMethod(
     'facetagwrite.getXMP',
     'face_tag_write_get_xmp',
@@ -470,7 +576,7 @@ function face_tag_write_ws_methods($arr)
     ),
     'Récupère les données XMP des visages (face_tag_write)',
     null,
-    array('admin_status' => ACCESS_ADMINISTRATOR)
+    array()   // droits vérifiés dans la fonction (face_tag_write_ws_guard)
   );
   
   $service->addMethod(
@@ -479,10 +585,11 @@ function face_tag_write_ws_methods($arr)
     array(
       'image_id' => array('default' => null, 'type' => WS_TYPE_INT),
       'faces' => array('default' => null, 'type' => WS_TYPE_NOTNULL),
+      'pwg_token' => array('default' => null),
     ),
     'Sauvegarde les données XMP des visages (face_tag_write)',
     null,
-    array('admin_status' => ACCESS_ADMINISTRATOR)
+    array('post_only' => true)   // droits + pwg_token vérifiés dans la fonction
   );
 
   $service->addMethod(
@@ -490,16 +597,23 @@ function face_tag_write_ws_methods($arr)
     'face_tag_write_restore_original',
     array(
       'image_id' => array('default' => null, 'type' => WS_TYPE_INT),
+      'pwg_token' => array('default' => null),
     ),
     'Restaure le fichier .original (supprime tous les tags)',
     null,
-    array('admin_status' => ACCESS_ADMINISTRATOR)
+    array('post_only' => true)   // droits + pwg_token vérifiés dans la fonction
   );
 }
 
 // ==================== WEB SERVICE POUR LIRE LES XMP ====================
 function face_tag_write_get_xmp($params, &$service)
 {
+  // 2.4b.5 : contrôle des droits côté serveur
+  $denied = face_tag_write_ws_guard($params, false);
+  if ($denied)
+  {
+    return $denied;
+  }
   
   header('Content-Type: application/json; charset=UTF-8');
   
@@ -709,6 +823,12 @@ function face_tag_write_extract_xmp($image_path)
 // ==================== WEB SERVICE POUR SAUVEGARDER ====================
 function face_tag_write_save_xmp($params, &$service)
 {
+  // 2.4b.5 : contrôle des droits côté serveur + jeton de session
+  $denied = face_tag_write_ws_guard($params, true);
+  if ($denied)
+  {
+    return $denied;
+  }
   
   header('Content-Type: application/json; charset=UTF-8');
   
@@ -921,6 +1041,11 @@ if ($save_original && !file_exists($backup_path)) {
 
 
   
+  // Noms des visages présents AVANT l'écriture : sert à retirer du registre facetag_person_tags
+  // les noms qui disparaissent de la photo (voir face_tag_write_unregister_removed_faces()).
+  // null = fichier illisible -> aucun retrait (prudence).
+  $previous_face_names = face_tag_write_face_names_in_file($real_local_path);
+
   $writer = new FaceTagMetadataWriterSimple();
   $merger = new FaceTagMetadataMerger();
   
@@ -1003,7 +1128,15 @@ if ($save_original && !file_exists($backup_path)) {
     } catch (Exception $e) {
       error_log('face_tag_editor: erreur enregistrement facetag_person_tags: ' . $e->getMessage());
     }
-    
+
+    try {
+      if ($previous_face_names !== null) {
+        face_tag_write_unregister_removed_faces($params['image_id'], $previous_face_names, $faces);
+      }
+    } catch (Exception $e) {
+      error_log('face_tag_editor: erreur retrait facetag_person_tags: ' . $e->getMessage());
+    }
+
     
     error_reporting($old_error_reporting);
     ini_set('display_errors', $old_display_errors);
@@ -1253,6 +1386,261 @@ ON DUPLICATE KEY UPDATE
   }
 }
 
+/**
+ * Nombre maximal d'autres photos dont on relit les cadres de visage avant de retirer un nom du
+ * registre. Au-delà, on garde la ligne (prudence) et on le signale dans le journal d'erreurs.
+ */
+define('FACETAGWRITE_UNREGISTER_MAX_FILES', 200);
+
+/**
+ * Noms des cadres de visage (MPReg et mwg-rs) d'un fichier JPEG, par simple lecture du segment
+ * XMP (pas d'Imagick, pas de getimagesize/exif : appelé sur beaucoup de fichiers).
+ *
+ * @param string $file_path Chemin réel du fichier
+ * @return string[]|null Noms (sans doublon), tableau vide si aucun visage, null si illisible
+ */
+function face_tag_write_face_names_in_file($file_path)
+{
+  $fp = @fopen($file_path, 'rb');
+  if (!$fp)
+  {
+    return null;
+  }
+  fclose($fp);
+
+  $xmp = facetag_editor_segment($file_path);
+  if (!$xmp)
+  {
+    return array();
+  }
+
+  $names = array();
+  if (preg_match_all('/<(?:MPReg:PersonDisplayName|mwg-rs:Name)>([^<]+)<\//i', $xmp, $m))
+  {
+    foreach ($m[1] as $raw)
+    {
+      $name = trim(html_entity_decode($raw, ENT_QUOTES | ENT_XML1, 'UTF-8'));
+      if ($name !== '' && !in_array($name, $names))
+      {
+        $names[] = $name;
+      }
+    }
+  }
+  return $names;
+}
+
+/**
+ * tag_id des noms donnés, SANS créer de tag (contrairement à tag_id_from_tag_name()).
+ * La comparaison est faite par MySQL, donc avec les mêmes règles que Piwigo (casse et accents
+ * selon la collation de la table des tags).
+ *
+ * @param string[] $names
+ * @return int[] tag_id trouvés (sans doublon)
+ */
+function face_tag_write_existing_tag_ids($names)
+{
+  $quoted = array();
+  foreach ($names as $name)
+  {
+    $name = trim((string)$name);
+    if ($name !== '')
+    {
+      $quoted[] = '\'' . pwg_db_real_escape_string($name) . '\'';
+    }
+  }
+  if (empty($quoted))
+  {
+    return array();
+  }
+  $ids = query2array('SELECT id FROM ' . TAGS_TABLE . ' WHERE name IN (' . implode(',', $quoted) . ');', null, 'id');
+  return array_values(array_unique(array_map('intval', $ids)));
+}
+
+/**
+ * Retire du registre facetag_person_tags les noms de visage qui viennent de disparaître de la
+ * photo (cadre supprimé ou renommé), quand plus aucune autre photo ne porte de cadre de ce nom.
+ *
+ * Sans ce retrait, un tag reste marqué « visage » pour toujours : cas réel d'un cadre « Arak »
+ * dessiné sur un chien puis supprimé, le tag (FAUNE|Chiens famille|Arak, 95 photos) restait caché
+ * du nuage de tags et de tag_manager.
+ *
+ * - Lignes source = 'manual' : jamais touchées.
+ * - Aucune table ne dit quelles photos portent un cadre d'un nom donné : on relit les cadres
+ *   (segment XMP seulement) des autres photos qui portent ce tag dans Piwigo, en s'arrêtant au
+ *   premier cadre trouvé, FACETAGWRITE_UNREGISTER_MAX_FILES fichiers au plus. Fichier illisible
+ *   ou plafond dépassé -> la ligne est gardée.
+ * - La ligne est SUPPRIMÉE (et non passée à is_face_tag = 0) : les insertions de face_tag et de
+ *   face_tag_editor ne remettent jamais is_face_tag à 1 sur une ligne existante, une ligne à 0
+ *   empêcherait le tag de redevenir « visage » si un cadre est redessiné plus tard.
+ *
+ * @param int $image_id
+ * @param string[] $previous_names Noms des cadres lus dans le fichier avant l'écriture
+ * @param array $faces Visages enregistrés (chaque élément a une clé 'name')
+ */
+function face_tag_write_unregister_removed_faces($image_id, $previous_names, $faces)
+{
+  if (empty($previous_names))
+  {
+    return;
+  }
+
+  $new_names = array();
+  foreach ($faces as $face)
+  {
+    if (!empty($face['name']))
+    {
+      $new_names[] = $face['name'];
+    }
+  }
+
+  // Comparaison par tag_id : un simple changement de casse ou d'accent (même tag Piwigo) n'est
+  // pas un retrait.
+  $removed_ids = array_diff(
+    face_tag_write_existing_tag_ids($previous_names),
+    face_tag_write_existing_tag_ids($new_names)
+  );
+  if (empty($removed_ids))
+  {
+    return;
+  }
+
+  $person_tags_table = face_tag_write_ensure_facetag_person_tags_table();
+  $auto_ids = query2array('
+SELECT tag_id FROM ' . $person_tags_table . '
+  WHERE tag_id IN (' . implode(',', array_map('intval', $removed_ids)) . ')
+    AND source = \'auto\'
+;', null, 'tag_id');
+
+  foreach ($auto_ids as $tag_id)
+  {
+    $tag_id = intval($tag_id);
+
+    $others = query2array('
+SELECT i.path
+  FROM ' . IMAGE_TAG_TABLE . ' AS it
+  INNER JOIN ' . IMAGES_TABLE . ' AS i ON i.id = it.image_id
+  WHERE it.tag_id = ' . $tag_id . '
+    AND it.image_id <> ' . intval($image_id) . '
+  LIMIT ' . (FACETAGWRITE_UNREGISTER_MAX_FILES + 1) . '
+;', null, 'path');
+
+    if (count($others) > FACETAGWRITE_UNREGISTER_MAX_FILES)
+    {
+      error_log('face_tag_editor: tag ' . $tag_id . ' gardé dans facetag_person_tags (plus de '
+        . FACETAGWRITE_UNREGISTER_MAX_FILES . ' autres photos à vérifier)');
+      continue;
+    }
+
+    $still_face = false;
+    foreach ($others as $path)
+    {
+      $file = face_tag_write_resolve_path($path);
+      $names = ($file === false) ? null : face_tag_write_face_names_in_file($file);
+      if ($names === null)
+      {
+        $still_face = true; // illisible : on ne peut pas conclure, on garde la ligne
+        break;
+      }
+      if (!empty($names) && in_array($tag_id, face_tag_write_existing_tag_ids($names)))
+      {
+        $still_face = true;
+        break;
+      }
+    }
+
+    if (!$still_face)
+    {
+      pwg_query('
+DELETE FROM ' . $person_tags_table . '
+  WHERE tag_id = ' . $tag_id . '
+    AND source = \'auto\'
+;');
+    }
+  }
+}
+
+// ==================== NOM DE VISAGE DÉJÀ UTILISÉ COMME TAG ORDINAIRE ====================
+/**
+ * Webservice facetagwrite.checkName (lecture seule) : appelé par la modale avant de valider un nom
+ * de visage. Signale un tag Piwigo du même nom, posé sur au moins une photo, qui n'est PAS dans le
+ * registre des visages (facetag_person_tags, is_face_tag = 1) : c'est très probablement un tag
+ * ordinaire (cas réel : cadre « Arak » dessiné sur un chien, tag FAUNE|Chiens famille|Arak sur
+ * 95 photos). La modale demande alors confirmation ; rien n'est interdit.
+ *
+ * Comparaison des noms par MySQL (mêmes règles que Piwigo). Le chemin du tag est pris, si possible,
+ * dans les mots-clés hiérarchiques de la photo ouverte (lecture du seul segment XMP).
+ *
+ * @return array ('warn' => bool, 'count' => nb de photos, 'paths' => chemins trouvés dans la photo)
+ */
+function face_tag_write_ws_check_name($params, &$service)
+{
+  global $prefixeTable;
+
+  // 2.4b.5 : contrôle des droits côté serveur
+  $denied = face_tag_write_ws_guard($params, false);
+  if ($denied)
+  {
+    return $denied;
+  }
+
+  $name = trim(stripslashes((string)$params['name']));
+  $result = array('warn' => false, 'count' => 0, 'paths' => array());
+  if ($name === '')
+  {
+    return $result;
+  }
+
+  $registry = $prefixeTable . 'facetag_person_tags';
+  $has_registry = (pwg_db_num_rows(pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string($registry) . '\';')) > 0);
+
+  $rows = query2array('
+SELECT t.id, COUNT(it.image_id) AS nb
+  FROM ' . TAGS_TABLE . ' AS t
+  LEFT JOIN ' . IMAGE_TAG_TABLE . ' AS it ON it.tag_id = t.id
+  WHERE t.name = \'' . pwg_db_real_escape_string($name) . '\''
+  . ($has_registry ? '
+    AND t.id NOT IN (SELECT tag_id FROM ' . $registry . ' WHERE is_face_tag = 1)' : '') . '
+  GROUP BY t.id
+;');
+
+  foreach ($rows as $row)
+  {
+    $result['count'] += intval($row['nb']);
+  }
+  if ($result['count'] === 0)
+  {
+    return $result;
+  }
+  $result['warn'] = true;
+
+  // Chemin(s) de ce nom dans la photo ouverte, hors racine Personnes
+  if (!empty($params['image_id']))
+  {
+    $img = query2array('SELECT path FROM ' . IMAGES_TABLE . ' WHERE id = ' . intval($params['image_id']) . ';');
+    $file = empty($img) ? false : face_tag_write_resolve_path($img[0]['path']);
+    $xmp = ($file === false) ? null : @facetag_editor_segment($file);
+    if ($xmp && preg_match('/<lr:hierarchicalSubject>(.*?)<\/lr:hierarchicalSubject>/s', $xmp, $block)
+      && preg_match_all('/<rdf:li>([^<]*)<\/rdf:li>/', $block[1], $lis))
+    {
+      $fold = function ($s) {
+        return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+      };
+      foreach ($lis[1] as $raw)
+      {
+        $path = html_entity_decode($raw, ENT_QUOTES | ENT_XML1, 'UTF-8');
+        $levels = array_values(array_filter(array_map('trim', explode('|', $path)), 'strlen'));
+        if (count($levels) > 1 && $levels[0] !== 'Personnes'
+          && $fold(end($levels)) === $fold($name))
+        {
+          $result['paths'][] = implode('|', $levels);
+        }
+      }
+    }
+  }
+
+  return $result;
+}
+
 // ==================== DÉRIVATION TEXTE BRUT POUR IPTC ====================
 // L'IPTC (tag 2#120, Caption-Abstract) ne supporte pas le HTML. On en dérive une version
 // texte brut pour le fichier, sans jamais relire ce texte brut pour reconstituer le HTML
@@ -1270,6 +1658,11 @@ function face_tag_html_to_plain_text($html)
 // Nouvelle fonction Web Service
 function facetagwrite_ws_get_faces($params, &$service)
 {
+  // 2.4b.5 : seulement une photo que l'utilisateur voit (sauf admin)
+  if (!empty($params['image_id']) && !is_admin() && !face_tag_write_image_visible($params['image_id']))
+  {
+    return new PwgError(403, 'Access denied');
+  }
   if (empty($params['image_id']))
   {
     return new PwgError(WS_ERR_INVALID_PARAM, 'Missing image_id');
@@ -1375,6 +1768,9 @@ function facetag_ws_get_translations($params, &$service)
     'Voulez-vous vraiment supprimer tous les tags de visages de cette image ?' => l10n('Voulez-vous vraiment supprimer tous les tags de visages de cette image ?'),
     'Êtes-vous sûr de vouloir effacer tous les rectangles ?' => l10n('Êtes-vous sûr de vouloir effacer tous les rectangles ?'),
     'confirm_restore_original' => l10n('confirm_restore_original'),
+    'confirm_face_name_is_tag' => l10n('confirm_face_name_is_tag'),
+    'confirm_face_name_is_tag_path' => l10n('confirm_face_name_is_tag_path'),
+    'confirm_face_name_is_tag_question' => l10n('confirm_face_name_is_tag_question'),
     'Télécharger JPG' => l10n('Télécharger JPG'),
     'Télécharger l\'image avec les rectangles visibles' => l10n('Télécharger l\'image avec les rectangles visibles'),
     'Aucun visage tagué à télécharger' => l10n('Aucun visage tagué à télécharger'),

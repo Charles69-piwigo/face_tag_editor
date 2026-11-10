@@ -167,4 +167,9 @@ $lang['Cette fonctionnalité peut être activée ou désactivée. La suppression
 $lang['Intégration Piwigo'] = 'Integrazione con Piwigo';
 $lang['Les tags sont ajoutés à la liste des tags Piwigo, et les miniatures sont mises à jour.'] = 'I tag vengono aggiunti all\'elenco dei tag Piwigo e le miniature vengono aggiornate.';
 
+// nom de visage déjà utilisé comme tag ordinaire (v2.4b.4)
+$lang['confirm_face_name_is_tag'] = '"{name}" esiste già come tag normale (non un volto), su {count} foto.';
+$lang['confirm_face_name_is_tag_path'] = 'In questa foto: {path}';
+$lang['confirm_face_name_is_tag_question'] = 'Creare comunque un volto con questo nome?';
+
 ?>

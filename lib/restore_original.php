@@ -11,7 +11,14 @@ if (!defined('PHPWG_ROOT_PATH')) die('Hacking attempt!');
 function face_tag_write_restore_original($params, &$service)
 {
   global $conf, $user;
-  
+
+  // 2.4b.5 : contrôle des droits côté serveur + jeton de session
+  $denied = face_tag_write_ws_guard($params, true);
+  if ($denied)
+  {
+    return $denied;
+  }
+
   //*error_log('=== RESTORE ORIGINAL REQUEST ===');
   
   $old_error_reporting = error_reporting(E_ALL);
