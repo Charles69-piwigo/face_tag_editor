@@ -422,6 +422,18 @@
   margin-top: 20px;
 }
 
+/* 2.5 : nom refusé car déjà utilisé comme tag ordinaire */
+#facetag-name-modal .facetag-name-blocked,
+#facetag-rename-modal .facetag-name-blocked {
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-left: 4px solid #c0392b;
+  background: #fdecea;
+  color: #8a1f11;
+  font-size: 13px;
+  white-space: pre-line;
+}
+
 #facetag-name-cancel {
   padding: 10px 20px;
   margin-right: 10px;

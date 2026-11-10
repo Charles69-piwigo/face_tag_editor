@@ -158,6 +158,6 @@ $lang['Les tags sont ajoutés à la liste des tags Piwigo, et les miniatures son
 // nom de visage déjà utilisé comme tag ordinaire (v2.4b.4)
 $lang['confirm_face_name_is_tag'] = '« {name} » existe déjà comme tag ordinaire (pas un visage), sur {count} photo(s).';
 $lang['confirm_face_name_is_tag_path'] = 'Dans cette photo : {path}';
-$lang['confirm_face_name_is_tag_question'] = 'Créer quand même un visage de ce nom ?';
+$lang['face_name_is_tag_blocked'] = 'Modifier le tag ordinaire au préalable.';
 
 ?>

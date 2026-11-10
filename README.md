@@ -19,7 +19,7 @@ Page du plugin : <https://piwigo.org/ext/extension_view.php?eid=1053>
   - **description enrichie** de la photo (éditeur Trumbowyg : gras, couleurs, polices, listes, liens) ; une description HTML complexe existante s'affiche en lecture seule pour ne pas l'abîmer ;
   - **télécharger la photo en JPG** avec les cadres incrustés ;
   - **restaurer l'original** (copie `.original`).
-- Si un nom saisi existe déjà comme tag ordinaire (par exemple le nom d'un animal), le plugin demande confirmation en indiquant le nombre de photos concernées.
+- Si un nom saisi existe déjà comme tag ordinaire (par exemple le nom d'un animal), il est refusé : la fenêtre indique le nombre de photos concernées et invite à modifier d'abord ce tag ordinaire.
 - Les visages déjà présents dans le fichier (créés par digiKam, Lightroom, Windows…) sont lus et affichés.
 - Chaque nom devient aussi un **tag Piwigo** (hiérarchie `Personnes|Nom` dans le fichier). Les autres tags du fichier, sans rapport avec les visages, sont conservés.
 - Après l'enregistrement, les tags Piwigo et les miniatures sont mis à jour.
@@ -97,7 +97,7 @@ Plugin page: <https://piwigo.org/ext/extension_view.php?eid=1053>
   - **rich-text description** of the photo (Trumbowyg editor: bold, colours, fonts, lists, links); an existing description with complex HTML is shown read-only so it cannot be damaged;
   - **download the photo as JPG** with the boxes drawn on it;
   - **restore the original** (`.original` copy).
-- If a name already exists as an ordinary tag (an animal's name, for example), the plugin asks for confirmation and shows how many photos carry it.
+- If a name already exists as an ordinary tag (an animal's name, for example), it is refused: the window shows how many photos carry it and asks you to change that ordinary tag first.
 - Faces already present in the file (created by digiKam, Lightroom, Windows…) are read and displayed.
 - Each name also becomes a **Piwigo tag** (`Personnes|Name` hierarchy in the file). The file's other tags, unrelated to faces, are kept.
 - After saving, Piwigo tags and thumbnails are updated.

@@ -1215,13 +1215,15 @@ canvas.on('object:modified', function(e) {
     }
     
     // ==================== DIALOGUE POUR NOMMER ====================
-    // ==================== NOM DÉJÀ UTILISÉ COMME TAG ORDINAIRE (v2.4b.4) ====================
+    // ==================== NOM DÉJÀ UTILISÉ COMME TAG ORDINAIRE (v2.4b.4, v2.5) ====================
     // Avant de valider un nom de visage, demande au serveur si ce nom existe déjà comme tag
-    // ordinaire (posé sur des photos, absent du registre des visages) ; si oui, confirmation.
-    // Un nom déjà porté par un autre cadre de cette photo n'est pas revérifié. En cas d'erreur
-    // réseau, on n'empêche rien.
+    // ordinaire (posé sur des photos, absent du registre des visages) ; si oui, le nom est refusé
+    // (2.5) : message dans la fenêtre, champ et bouton de validation retirés, seul « Annuler »
+    // reste. Un nom déjà porté par un autre cadre de cette photo n'est pas revérifié. En cas
+    // d'erreur réseau, on n'empêche rien.
+    // modalPrefix : 'facetag-name' (création) ou 'facetag-rename' (renommage)
     var checkingName = false;
-    function checkFaceName(name, onAccept) {
+    function checkFaceName(name, onAccept, modalPrefix) {
       var lower = name.toLowerCase();
       if (faces.some(f => f.name && f.name.toLowerCase() === lower)) {
         onAccept();
@@ -1247,10 +1249,13 @@ canvas.on('object:modified', function(e) {
         if (r.paths && r.paths.length > 0) {
           msg += '\n' + _('confirm_face_name_is_tag_path').replace('{path}', r.paths.join(', '));
         }
-        msg += '\n\n' + _('confirm_face_name_is_tag_question');
-        if (confirm(msg)) {
-          onAccept();
-        }
+        msg += '\n\n' + _('face_name_is_tag_blocked');
+        var $modal = $('#' + modalPrefix + '-modal');
+        $modal.find('.facetag-name-blocked').remove();
+        $('<div class="facetag-name-blocked"></div>').text(msg).insertBefore($modal.find('.modal-buttons'));
+        $('#' + modalPrefix + '-input').prop('disabled', true);
+        $('#' + modalPrefix + '-save').remove();
+        $('#' + modalPrefix + '-cancel').focus();
       }).fail(function() {
         checkingName = false;
         onAccept();
@@ -1302,7 +1307,7 @@ try {
 }
 
 closeNameModal();
-});
+}, 'facetag-name');
       });
       
       $('#facetag-name-cancel').click(function() {
@@ -1375,7 +1380,7 @@ var renameModal = `
 
         //*console.log("✅ Visage renommé avec succès");
         closeRenameModal();
-        });
+        }, 'facetag-rename');
       });
 
       $('#facetag-rename-cancel').click(function() {

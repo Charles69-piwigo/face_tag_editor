@@ -32,10 +32,12 @@ version 2.5 - 10/11/2026  (regroupe 2.4b.1 à 2.4b.5)
     (ligne supprimée) si plus aucune autre photo portant ce tag n'a de cadre de ce nom (lecture
     du seul segment XMP, 200 photos au plus, sinon ligne gardée) ; lignes 'manual' jamais touchées
     ajouté (2.4b.4) : avant de valider un nom de visage (création ou renommage), la modale vérifie
-    s'il existe déjà comme tag ordinaire (posé sur des photos, absent du registre des visages) et
-    demande confirmation en indiquant le nombre de photos et, si la photo le porte, son chemin
-    (ex: FAUNE|Chiens famille|Arak) ; webservice facetagwrite.checkName en lecture seule (base
-    + segment XMP de la photo ouverte) ; rien n'est interdit, une erreur réseau ne bloque pas
+    s'il existe déjà comme tag ordinaire (posé sur des photos, absent du registre des visages) ;
+    si oui, le nom est refusé : la fenêtre affiche le nombre de photos, le chemin dans la photo
+    s'il y en a un (ex: FAUNE|Chiens famille|Arak) et "Modifier le tag ordinaire au préalable" ;
+    le champ et le bouton de validation sont retirés, seul "Annuler" reste ; webservice
+    facetagwrite.checkName en lecture seule (base + segment XMP de la photo ouverte) ; une erreur
+    réseau ne bloque pas
     corrigé (2.4b.3, PR #6 Gvf63) : pendant le redimensionnement d'un cadre, le nom s'éloignait
     du cadre (position multipliée par l'échelle, alors que left/top de Fabric.js n'en dépendent
     pas) ; en déplaçant un cadre déjà redimensionné, le nom revenait à la hauteur d'origine du
@@ -1770,7 +1772,7 @@ function facetag_ws_get_translations($params, &$service)
     'confirm_restore_original' => l10n('confirm_restore_original'),
     'confirm_face_name_is_tag' => l10n('confirm_face_name_is_tag'),
     'confirm_face_name_is_tag_path' => l10n('confirm_face_name_is_tag_path'),
-    'confirm_face_name_is_tag_question' => l10n('confirm_face_name_is_tag_question'),
+    'face_name_is_tag_blocked' => l10n('face_name_is_tag_blocked'),
     'Télécharger JPG' => l10n('Télécharger JPG'),
     'Télécharger l\'image avec les rectangles visibles' => l10n('Télécharger l\'image avec les rectangles visibles'),
     'Aucun visage tagué à télécharger' => l10n('Aucun visage tagué à télécharger'),

@@ -170,6 +170,6 @@ $lang['Les tags sont ajoutés à la liste des tags Piwigo, et les miniatures son
 // nom de visage déjà utilisé comme tag ordinaire (v2.4b.4)
 $lang['confirm_face_name_is_tag'] = '"{name}" esiste già come tag normale (non un volto), su {count} foto.';
 $lang['confirm_face_name_is_tag_path'] = 'In questa foto: {path}';
-$lang['confirm_face_name_is_tag_question'] = 'Creare comunque un volto con questo nome?';
+$lang['face_name_is_tag_blocked'] = 'Modificare prima il tag normale.';
 
 ?>
