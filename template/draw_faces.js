@@ -21,6 +21,8 @@
     // Variables partagées pour stocker les XMP (comme face_tag)
     var xmpData = null;
     var existingFaces = [];
+    var unframedNames = [];             // 2.5.4 : personnes nommées dans le fichier sans cadre
+    var unframedRemove = {};            // 2.5.4 : nom -> true si « Retirer » est demandé
     var hasOriginal = false;
     var currentDescription = '';        // Description de l'image (IPTC Caption-Abstract)
     var isDescriptionReadonly = false;  // true si HTML complexe détecté (class="...") : édition désactivée
@@ -288,6 +290,13 @@ var modalHtml = `
           <p>${_('Aucun visage tagué')}</p>
         </div>
 
+        <!-- 2.5.4 : noms sans cadre -->
+        <div id="facetag-unframed-section" style="display:none">
+          <h4>${_('Noms sans cadre')} (<span id="facetag-unframed-count">0</span>)</h4>
+          <p class="facetag-unframed-help">${_('unframed_help')}</p>
+          <div id="facetag-unframed-list"></div>
+        </div>
+
         <!-- Description de l'image -->
         <div class="description-section">
           <label for="facetag-description">${_('Description')} :</label>
@@ -463,6 +472,11 @@ if (isDescriptionReadonly) {
         formData.append('image_id', imageId);
         formData.append('pwg_token', pwgToken);
         formData.append('faces', JSON.stringify(facesData));
+        // 2.5.4 : noms sans cadre à retirer du fichier
+        var toRemove = Object.keys(unframedRemove).filter(function(n) { return unframedRemove[n]; });
+        if (toRemove.length > 0) {
+          formData.append('remove_unframed', JSON.stringify(toRemove));
+        }
         // Ne pas envoyer la description si elle est en lecture seule : le backend garde alors
         // la valeur existante en base et ne touche pas au tag IPTC (voir main.inc.php).
         if (!isDescriptionReadonly) {
@@ -698,6 +712,11 @@ if (data.stat === 'ok' && xmpContainer && xmpContainer.xmp) {
             
             // ====================  STOCKER L'ORIENTATION =======================================================
             xmpData.orientation = xmpContainer.orientation || 1;
+
+            // 2.5.4 : noms sans cadre (liste à part, rien n'est retiré sans clic)
+            unframedNames = Array.isArray(xmpData.unframed) ? xmpData.unframed : [];
+            unframedRemove = {};
+            updateUnframedList();
             //*console.log('✓ Orientation EXIF:', xmpData.orientation);
             
             //*console.log('✓ XMP Orientation chargé');
@@ -1243,10 +1262,15 @@ canvas.on('object:modified', function(e) {
           onAccept();
           return;
         }
-        var msg = _('confirm_face_name_is_tag')
-          .replace('{name}', name)
-          .replace('{count}', r.count);
-        if (r.paths && r.paths.length > 0) {
+        // 2.5.3 : tag ordinaire sans photo, rangé dans tag_manager
+        var msg = r.nophoto
+          ? _('face_name_is_tag_nophoto').replace('{name}', name).replace('{path}', (r.tm_paths || []).join(', '))
+          : _('confirm_face_name_is_tag').replace('{name}', name).replace('{count}', r.count);
+        // 2.5.3 : nom écrit autrement que le tag (Piwigo les confond : casse, accents, symboles)
+        if (r.tag_names && r.tag_names.length > 0) {
+          msg += '\n' + _('face_name_same_tag').replace('{name}', name).replace('{tag}', r.tag_names.join(', '));
+        }
+        if (!r.nophoto && r.paths && r.paths.length > 0) {
           msg += '\n' + _('confirm_face_name_is_tag_path').replace('{path}', r.paths.join(', '));
         }
         msg += '\n\n' + _('face_name_is_tag_blocked');
@@ -1471,7 +1495,8 @@ function updateFacesList() {
   
   $count.text(faces.length);
   $list.empty();
-  
+  updateUnframedList(); // 2.5.4 : « cadre dessiné » suit la liste des cadres
+
   if (faces.length === 0) {
     $list.html(`<p>${_('Aucun visage tagué')}</p>`);
     return;
@@ -1508,6 +1533,62 @@ function deleteFace(index) {
   canvas.renderAll();
   faces.splice(index, 1);
   updateFacesList();
+}
+
+// 2.5.4 : texte sûr dans le HTML (noms lus dans le fichier)
+function escapeFacetagHtml(s) {
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+// 2.5.4 : liste des noms sans cadre. « Retirer » / « Garder » ne change rien avant l'enregistrement ;
+// un nom pour lequel un cadre vient d'être dessiné est indiqué comme tel (sa région sans zone, en
+// doublon, est retirée par le serveur, ses mots-clés restent).
+function updateUnframedList() {
+  var $section = $('#facetag-unframed-section');
+  var $list = $('#facetag-unframed-list');
+  if (!$section.length) {
+    return;
+  }
+  $list.empty();
+  $('#facetag-unframed-count').text(unframedNames.length);
+  if (unframedNames.length === 0) {
+    $section.hide();
+    return;
+  }
+  $section.show();
+
+  var framed = {};
+  faces.forEach(function(f) { framed[f.name] = true; });
+
+  unframedNames.forEach(function(u) {
+    var where = [];
+    if (u.region) { where.push(_('nom sans zone')); }
+    if (u.keyword) { where.push(_('mot-clé de personne')); }
+    var detail = where.join(', ');
+    if (u.ordinary) {
+      detail += (detail ? ' ; ' : '') + _('aussi tag ordinaire (gardé)');
+    }
+    var removing = !!unframedRemove[u.name];
+    var $item = $('<div>').addClass('face-item unframed' + (removing ? ' removing' : ''));
+    var html = '<span class="face-item-name">' + escapeFacetagHtml(u.name)
+      + '<span class="face-item-detail">' + escapeFacetagHtml(detail) + '</span></span>';
+    if (framed[u.name]) {
+      html += '<span class="face-item-badge">' + escapeFacetagHtml(_('cadre dessiné')) + '</span>';
+    } else {
+      html += '<button class="facetag-unframed-toggle" data-name="' + escapeFacetagHtml(u.name) + '">'
+        + escapeFacetagHtml(removing ? _('Garder') : _('Retirer')) + '</button>';
+    }
+    $item.html(html);
+    $list.append($item);
+  });
+
+  $list.off('click', '.facetag-unframed-toggle').on('click', '.facetag-unframed-toggle', function() {
+    var name = $(this).attr('data-name');
+    unframedRemove[name] = !unframedRemove[name];
+    updateUnframedList();
+  });
 }
     
     // ==================== FERMER LA MODALE =========================================================

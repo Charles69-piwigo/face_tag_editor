@@ -169,6 +169,70 @@
   background: #cc0000;
 }
 
+/* 2.5.4 : noms sans cadre */
+#facetag-unframed-section {
+  margin-top: 15px;
+}
+
+#facetag-unframed-section .facetag-unframed-help {
+  font-size: 12px;
+  color: #bbb; /* fond de la barre latérale : #2a2a2a */
+  margin: 0 0 6px;
+}
+
+#facetag-unframed-list .face-item {
+  padding: 8px 10px;
+  margin: 5px 0;
+  background: #fff8e1;
+  border: 1px dashed #c9a227;
+  border-radius: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+#facetag-unframed-list .face-item-name {
+  color: #333;
+  font-weight: bold;
+}
+
+#facetag-unframed-list .face-item-detail {
+  display: block;
+  font-weight: normal;
+  font-size: 11px;
+  color: #777;
+}
+
+#facetag-unframed-list .face-item.removing .face-item-name {
+  text-decoration: line-through;
+  color: #999;
+}
+
+#facetag-unframed-list .face-item-badge {
+  font-size: 10px;
+  background: #2196F3;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+#facetag-unframed-list .face-item button {
+  padding: 5px 12px;
+  background: #c9a227;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+#facetag-unframed-list .face-item.removing button {
+  background: #777;
+}
+
 /* ============================================
    FOOTER (boutons d'action)
    ============================================ */

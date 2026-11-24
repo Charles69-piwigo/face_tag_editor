@@ -30,6 +30,10 @@ switch ($page['tab']) {
         include(FACETAGWRITE_PATH . 'admin/manage_rights.php');
         break;
 
+    case 'keywords_tool':
+        include(FACETAGWRITE_PATH . 'admin/keywords_tool.php');
+        break;
+
 
 
     default:

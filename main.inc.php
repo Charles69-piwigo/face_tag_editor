@@ -11,6 +11,105 @@ Has Settings: webmaster
 //============= VERSIONS ============================================
 /*
 
+version 2.6 - 24/11/2026  (regroupe 2.5.1 à 2.5.7)
+    corrigé (2.5.7) : sur une photo dont le XMP range chaque espace de noms dans son propre
+    rdf:Description (écrit par ExifTool, donc par le digiKam actuel), l'enregistrement pouvait
+    rendre le XMP invalide : la déclaration d'un préfixe (ex. digiKam, dc) était retirée d'un bloc
+    qui gardait un champ de ce préfixe (ex. digiKam:ColorLabel), car toute déclaration après la
+    première du document était jugée en double ; seules celles déjà portées par un élément parent
+    sont maintenant retirées, et un préfixe utilisé sans déclaration (fichier déjà abîmé par une
+    version précédente) est redéclaré. Constaté sur 2 photos du site de dev (dont 1 déjà abîmée)
+    et sur une photo écrite par digiKam
+    corrigé (2.5.6) : l'éditeur écrivait à chaque enregistrement un champ digiKam:CatalogSets
+    (Personnes|Nom), créé même s'il manquait ; ce champ n'existe pas chez digiKam (le vrai est
+    mediapro:CatalogSets, tenu à jour depuis 2.5.5), aucun logiciel ne le lit, et il n'était pas
+    mis à jour par tag_manager (anciens noms restés) ; comptage du site de dev : 31 photos sur 426,
+    toutes écrites par face_tag_editor, seulement des noms de personnes. Il n'est plus écrit, et
+    l'enregistrement d'une photo retire l'ancien champ (élément ou attribut). L'outil « Mots-clés
+    des visages » ne le complète plus (une photo n'est plus signalée pour ce seul champ)
+    corrigé (2.5.5) : à chaque enregistrement, les champs de mots-clés que l'éditeur n'écrivait pas
+    restaient en retard (personne ajoutée absente, personne retirée toujours présente) : Exif
+    XPKeywords (« Mots-clés » de l'Explorateur Windows), MicrosoftPhoto:LastKeywordXMP,
+    mediapro:CatalogSets, acdsee:categories (élément ou attribut). Ils suivent maintenant les
+    personnes écrites dans lr:hierarchicalSubject ; un champ absent n'est jamais créé, les
+    mots-clés qui ne sont pas des personnes ne bougent pas ; XPKeywords réécrit sans déplacer les
+    autres données Exif (vignette, MakerNote) ; un échec laisse ces champs comme avant sans bloquer
+    l'enregistrement. Code repris de tag_manager (lib/secondary_keywords.php)
+    ajouté (2.5.4) : liste « Noms sans cadre » dans la modale, sous les visages tagués : personnes nommées
+    dans le fichier sans cadre de visage (nom Microsoft sans rectangle, région MWG sans zone, ou
+    mot-clé de personne Racine|Nom sans cadre du même nom). Depuis 2.5.1 l'éditeur ne les affichait
+    plus et les conservait à chaque enregistrement : impossible de les retirer (cas réel : un tag de
+    personne attaché sans cadre dans digiKam, écrit comme nom sans rectangle, qui décalait les noms
+    dans l'affichage de face_tag). « Retirer » les enlève du fichier à l'enregistrement : régions sans
+    zone de ce nom, mots-clés de personne (dc:subject, lr:hierarchicalSubject, digiKam:TagsList,
+    MicrosoftPhoto:LastKeywordXMP, mediapro:CatalogSets, digiKam:CatalogSets), IPTC 2:25, et le tag
+    Piwigo de la photo ; le mot-clé simple et le tag Piwigo sont gardés si le fichier porte aussi un
+    tag ordinaire de ce nom (homonyme). Une région sans zone d'un nom qui a un cadre (doublon) est
+    retirée d'office. acdsee:categories et Exif XPKeywords : voir 2.5.5. Racines de personnes :
+    Personnes, celle de l'outil « Mots-clés des visages », celles de tag_manager. Retrait sur le
+    fichier temporaire après l'écriture habituelle (par segments JPEG) : rien n'atteint la photo si
+    une étape échoue (lib/unframed_names.php)
+    corrigé (2.5.3) : la modale acceptait comme nom de visage un tag ordinaire posé sur aucune photo (par
+    exemple créé dans tag_manager) : il entrait dans le registre des visages, et le même tag aurait
+    désigné la personne et le tag ordinaire (Piwigo n'a qu'un tag par nom), caché ensuite comme
+    visage par tag_manager ; facetagwrite.checkName le refuse maintenant aussi quand il a un chemin
+    ordinaire dans l'index de tag_manager (table tag_manager_paths, hors des racines réservées aux
+    visages) ; message : « … sur aucune photo mais rangé dans tag_manager : ZEN|CANON » ; un tag sans
+    photo et sans chemin (reste abandonné) reste accepté
+    corrigé (2.5.3) : checkName ne comparait que les noms, alors que Piwigo (tag_id_from_tag_name, utilisé à
+    l'enregistrement) rattache un nom sans tag au tag de même nom d'URL : « @ canon » ou « Canon! »
+    devenaient le tag ordinaire « CANON », « 1970 Cannes » le tag « 1970 - Cannes » ; le tag est
+    maintenant cherché comme le fait Piwigo (nom, sinon nom d'URL) et la modale affiche le tag réel :
+    « Pour Piwigo, « @ canon » et « CANON » sont le même tag. »
+    ajouté (2.5.2) : outil de réparation « Mots-clés des visages » (onglet d'administration masqué par défaut,
+    affiché avec $conf['face_tag_editor_keywords_tool'] = true dans LocalFiles Editor, webmestres
+    seulement). Une ancienne version de digiKam (écriture par Exiv2) a enregistré des visages sans
+    cadre ou des valeurs erronées ; une fois les cadres remis (par exemple avec Picasa, qui écrit les
+    cadres mais pas les mots-clés), des photos ont un cadre nommé sans le mot-clé de la personne.
+    Pour chaque cadre de visage nommé dont le fichier n'a pas le mot-clé, l'outil ajoute ce mot-clé
+    au fichier et le tag Piwigo à la photo ; n'écrit que des mots-clés, jamais les régions, et n'en
+    retire aucun : dc:subject, lr:hierarchicalSubject (Racine|Nom), digiKam:TagsList (Racine/Nom),
+    MicrosoftPhoto:LastKeywordXMP / mediapro:CatalogSets / digiKam:CatalogSets s'ils existent, IPTC
+    2:25 (64 octets max, rien si l'IPTC est dans un autre jeu de caractères non déclaré) ; racine
+    réglable (Personnes par défaut), ou celle déjà employée dans le fichier pour un autre visage ;
+    écriture par segments JPEG (pixels intacts, sans exiftool), fichiers à XMP étendu ignorés,
+    .original facultatif ; analyse par lots en lecture seule (toute la galerie, ou les albums cochés dans un
+    arbre repris de synchro_smart, sous-albums inclus), aperçu chiffré par album avant toute écriture ; seuls les noms connus comme visages
+    (registre facetag_person_tags, ou tag rangé sous une racine de personnes dans tag_manager, ex.
+    Personnes|Nom : personne étiquetée autrefois sans cadre, jamais entrée au registre ; elle y est
+    inscrite après écriture) sont écrits ; le tag d'un nom est trouvé comme le fait Piwigo
+    (tag_id_from_tag_name : nom selon la collation, sinon nom d'URL ; ex. « @ macareux » = tag
+    « macareux ») ; les cas douteux sont listés à part sans écriture :
+    aucun tag de ce nom (avec les personnes d'orthographe proche, ex. Chevalier / Chevallier), tag
+    ordinaire que Piwigo confond avec ce nom, tag ordinaire hors registre (homonyme) ; un nom de cadre sans tag Piwigo mais
+    déjà présent dans tous les mots-clés du fichier n'est pas douteux (fichier cohérent, Piwigo pas à
+    jour, ex. cadre renommé) : le tag est créé, inscrit au registre et posé sur la photo, sans écrire
+    dans le fichier ; tags Piwigo ajoutés depuis la liste
+    écrite, sans sync_metadata() ; analyse interruptible et reprenable (état gardé sur le serveur
+    dans _data/plugins/face_tag_editor_kwscan.json, supprimé à la désinstallation), écriture
+    interruptible, ce qui est déjà écrit n'est plus proposé ; présentation reprise de synchro_smart
+    (barre de progression, compteurs, nouvel essai en cas d'erreur réseau) ; pwg_token exigé
+    (lib/keywords_tool.php, admin/keywords_tool.php)
+    corrigé (2.5.1) : lecture des cadres de visage (lib/editor_xmp_ex.php) ; les noms et les zones étaient
+    relevés séparément par regex sur tout le document puis appariés par rang : un visage sans nom
+    (CEWE, Picasa, digiKam), un nom Microsoft sans rectangle ou une région BarCode/Focus décalaient
+    les noms (cadre nommé affiché sur un autre visage), une zone écrite en attributs (digiKam via
+    ExifTool, Lightroom) n'était pas lue, deux visages de même nom n'en faisaient qu'un ; lecture
+    maintenant par analyseur XML, région par région (nom et zone de la même région, balises ou
+    attributs, type Face ou absent, zone normalisée, extension XMP lue à part) ; vérifié sur les 39 photos à
+    régions du site de dev : 3 photos corrigées, aucune autre différence
+    corrigé (2.5.1) : l'enregistrement effaçait toutes les régions du fichier pour les réécrire depuis la
+    liste affichée : une erreur de lecture devenait une perte définitive, et les visages non
+    identifiés, régions BarCode/Focus et données annexes (Rotation, extensions CEWE...) étaient
+    supprimés ; seuls les cadres modifiés, ajoutés ou supprimés dans l'éditeur sont maintenant
+    réécrits, les autres régions restent telles quelles (lib/metadata_writer.php)
+    corrigé (2.5.1) : un nom de visage contenant & était écrit vide dans les régions et les mots-clés
+    XMP (createElementNS)
+    accepté (2.5.1) : préfixe MPReg lié à l'URI de MPRI (fichier digiKam / ExifTool 13.41), lu par ExifTool
+    retrait (2.5.1) du registre des visages : mêmes cadres que l'éditeur (un nom sans zone n'est plus
+    compté comme cadre)
+    ajouté : index.php de redirection dans chaque dossier du plugin
+
 version 2.5 - 10/11/2026  (regroupe 2.4b.1 à 2.4b.5)
     sécurité (2.4b.5) : les webservices getXMP, saveXMP, restoreOriginal et checkName ne
     vérifiaient aucun droit (l'option admin_status utilisée n'existe pas dans Piwigo et était
@@ -238,6 +337,8 @@ require_once(FACETAGWRITE_PATH . 'lib/editor_xmp_ex.php');
   // Charger les classes
 require_once(FACETAGWRITE_PATH . 'lib/imagick_wrapper.php');
 require_once(FACETAGWRITE_PATH . 'lib/jpeg_segments.php');
+require_once(FACETAGWRITE_PATH . 'lib/unframed_names.php'); // 2.5.4 : noms sans cadre
+require_once(FACETAGWRITE_PATH . 'lib/secondary_keywords.php'); // 2.5.5 : XPKeywords, LastKeywordXMP…
 require_once(FACETAGWRITE_PATH . 'lib/metadata_writer.php');
 require_once(FACETAGWRITE_PATH . 'lib/metadata_merger.php');
 require_once(FACETAGWRITE_PATH . 'lib/file_resolver.php');
@@ -588,6 +689,7 @@ function face_tag_write_ws_methods($arr)
       'image_id' => array('default' => null, 'type' => WS_TYPE_INT),
       'faces' => array('default' => null, 'type' => WS_TYPE_NOTNULL),
       'pwg_token' => array('default' => null),
+      'remove_unframed' => array('default' => null), // 2.5.4 : JSON, noms sans cadre à retirer
     ),
     'Sauvegarde les données XMP des visages (face_tag_write)',
     null,
@@ -766,6 +868,9 @@ function face_tag_write_get_xmp($params, &$service)
     $xmp_data['faces'] = $faces;
   }
 
+  // 2.5.4 : personnes nommées dans le fichier sans cadre (liste à part dans la modale)
+  $xmp_data['unframed'] = facetagwrite_unframed_list($real_local_path);
+
   return array(
     'stat' => 'ok',
     'result' => array(
@@ -906,6 +1011,22 @@ $description_sent = isset($params['description']);
     return new PwgError(WS_ERR_INVALID_PARAM, 'Invalid faces data');
   }
   
+  // 2.5.4 : noms sans cadre à retirer (liste de noms, JSON) ; revérifiés sur le fichier à l'écriture
+  $remove_unframed = array();
+  if (!empty($params['remove_unframed'])) {
+    $decoded = json_decode(stripslashes($params['remove_unframed']), true);
+    if (!is_array($decoded)) {
+      $decoded = json_decode($params['remove_unframed'], true);
+    }
+    if (is_array($decoded)) {
+      foreach ($decoded as $n) {
+        if (is_string($n) && trim($n) !== '') {
+          $remove_unframed[] = trim($n);
+        }
+      }
+    }
+  }
+
   // Permettre tableau vide pour supprimer tous les tags
   if (count($faces) === 0) {
     //*error_log('-> Suppression de tous les visages (tableau vide)');
@@ -1073,10 +1194,64 @@ if ($save_original && !file_exists($backup_path)) {
     return new PwgError(500, 'Exception: ' . $e->getMessage());
   }
   
+  // 2.5.4 : noms sans cadre retirés du fichier temporaire, avant qu'il remplace la photo.
+  // Retire aussi les régions sans zone d'un nom qui a maintenant un cadre (doublon). JPEG seulement.
+  $unframed_removed = array();
+  if ($result['success'])
+  {
+    $tmp_data = @file_get_contents($temp_file);
+    $u = ($tmp_data === false) ? array('error' => 'fichier_illisible')
+      : facetagwrite_unframed_remove_data($tmp_data, $remove_unframed, facetagwrite_person_roots());
+    if ($u['error'] !== null && !empty($remove_unframed))
+    {
+      @unlink($temp_file);
+      error_reporting($old_error_reporting);
+      ini_set('display_errors', $old_display_errors);
+      return new PwgError(500, 'Cannot remove names without a face frame: ' . $u['error']);
+    }
+    if ($u['error'] === null && $u['changed'])
+    {
+      if (@file_put_contents($temp_file, $u['data']) !== strlen($u['data']))
+      {
+        @unlink($temp_file);
+        error_reporting($old_error_reporting);
+        ini_set('display_errors', $old_display_errors);
+        return new PwgError(500, 'Cannot write temporary file');
+      }
+      $unframed_removed = $u['removed'];
+      // Tags Piwigo : le mot-clé simple retiré du fichier ne doit pas être reposé sur la photo
+      if (!empty($u['leaf_removed']))
+      {
+        $merged_data['all_subjects'] = array_values(array_diff($merged_data['all_subjects'], $u['leaf_removed']));
+      }
+    }
+
+    // 2.5.5 : champs secondaires (XPKeywords, LastKeywordXMP, mediapro:CatalogSets,
+    // acdsee:categories) mis d'accord avec les personnes écrites. Un échec ne bloque pas
+    // l'enregistrement : ces champs restent alors comme avant (comportement jusqu'à 2.5.4).
+    $tmp_data = @file_get_contents($temp_file);
+    if ($tmp_data !== false)
+    {
+      $known = array_merge(is_array($previous_face_names) ? $previous_face_names : array(), $remove_unframed);
+      $sec = facetagwrite_sec_sync_data($tmp_data, facetagwrite_person_roots(), $known);
+      if ($sec['error'] === null && $sec['changed'])
+      {
+        if (@file_put_contents($temp_file, $sec['data']) !== strlen($sec['data']))
+        {
+          @file_put_contents($temp_file, $tmp_data); // retour à l'état d'avant cette étape
+        }
+      }
+      elseif ($sec['error'] !== null)
+      {
+        error_log('face_tag_editor: champs secondaires non mis à jour : ' . $sec['error']);
+      }
+    }
+  }
+
   if ($result['success'])
   {
     //*error_log(' XMP écrit sur fichier temporaire');
-    
+
     // Essayer d'écrire sur le chemin résolu
     //*error_log('>> main.inc.php');
     //*error_log('Tentative copie vers: ' . $real_local_path);
@@ -1147,7 +1322,8 @@ if ($save_original && !file_exists($backup_path)) {
       'stat' => 'ok',
       'message' => 'XMP saved successfully',
       'faces_count' => count($faces),
-      'backup_created' => $backup_created
+      'backup_created' => $backup_created,
+      'unframed_removed' => $unframed_removed
     );
     
     // Propager le warning si exiftool manque
@@ -1410,22 +1586,20 @@ function face_tag_write_face_names_in_file($file_path)
   }
   fclose($fp);
 
-  $xmp = facetag_editor_segment($file_path);
-  if (!$xmp)
+  $parts = facetag_editor_segment_parts($file_path);
+  if ($parts === null)
   {
     return array();
   }
 
+  // 2.5.1 : mêmes cadres que ceux affichés par l'éditeur (nom ET zone dans la même région),
+  // et non plus tout nom trouvé dans le document (un nom Microsoft sans rectangle n'est pas un cadre)
   $names = array();
-  if (preg_match_all('/<(?:MPReg:PersonDisplayName|mwg-rs:Name)>([^<]+)<\//i', $xmp, $m))
+  foreach (facetag_editor_faces_from_xmp(array($parts['main'], $parts['ext'])) as $face)
   {
-    foreach ($m[1] as $raw)
+    if (!in_array($face['name'], $names))
     {
-      $name = trim(html_entity_decode($raw, ENT_QUOTES | ENT_XML1, 'UTF-8'));
-      if ($name !== '' && !in_array($name, $names))
-      {
-        $names[] = $name;
-      }
+      $names[] = $face['name'];
     }
   }
   return $names;
@@ -1563,16 +1737,83 @@ DELETE FROM ' . $person_tags_table . '
 
 // ==================== NOM DE VISAGE DÉJÀ UTILISÉ COMME TAG ORDINAIRE ====================
 /**
+ * Chemins ordinaires de ces tags dans l'index de tag_manager (2.5.3) : lignes « tag » au statut ok,
+ * avec au moins un niveau parent, hors des racines que tag_manager réserve aux visages (réglage
+ * tag_manager_config['reserved'], « Personnes » par défaut). Tableau vide si tag_manager n'a pas de table.
+ * 2.5.3 : avec $persons = true, renvoie au contraire les chemins SOUS ces racines (tag rangé comme
+ * personne, ex. Personnes|Nom : sert à l'outil « Mots-clés des visages »).
+ *
+ * @param int[] $tag_ids
+ * @param bool $persons
+ * @return string[] chemins « A|B|Nom »
+ */
+function face_tag_write_tag_manager_paths($tag_ids, $persons = false)
+{
+  global $prefixeTable;
+  if (empty($tag_ids))
+  {
+    return array();
+  }
+  $table = $prefixeTable . 'tag_manager_paths';
+  if (pwg_db_num_rows(pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string($table) . '\';')) === 0)
+  {
+    return array();
+  }
+
+  $reserved = array('Personnes');
+  $raw = conf_get_param('tag_manager_config', null);
+  $tm = is_array($raw) ? $raw : (is_string($raw) ? json_decode($raw, true) : null);
+  if (is_array($tm) && !empty($tm['reserved']) && is_array($tm['reserved']))
+  {
+    $reserved = $tm['reserved'];
+  }
+  $fold = function ($s) {
+    $s = trim((string)$s);
+    return function_exists('mb_strtolower') ? mb_strtolower($s, 'UTF-8') : strtolower($s);
+  };
+  $reserved = array_map($fold, $reserved);
+
+  $paths = array();
+  $rows = query2array('
+SELECT path
+  FROM ' . $table . '
+  WHERE kind = \'tag\'
+    AND status = \'ok\'
+    AND tag_id IN (' . implode(',', array_map('intval', $tag_ids)) . ')
+;');
+  foreach ($rows as $row)
+  {
+    $levels = array_values(array_filter(array_map('trim', explode('|', $row['path'])), 'strlen'));
+    if (count($levels) > 1 && in_array($fold($levels[0]), $reserved, true) === (bool)$persons)
+    {
+      $paths[] = implode('|', $levels);
+    }
+  }
+  return $paths;
+}
+
+/**
  * Webservice facetagwrite.checkName (lecture seule) : appelé par la modale avant de valider un nom
  * de visage. Signale un tag Piwigo du même nom, posé sur au moins une photo, qui n'est PAS dans le
  * registre des visages (facetag_person_tags, is_face_tag = 1) : c'est très probablement un tag
  * ordinaire (cas réel : cadre « Arak » dessiné sur un chien, tag FAUNE|Chiens famille|Arak sur
- * 95 photos). La modale demande alors confirmation ; rien n'est interdit.
+ * 95 photos). Depuis 2.5, la modale refuse alors le nom (« Modifier le tag ordinaire au préalable »).
+ *
+ * 2.5.3 : un tag ordinaire posé sur aucune photo est signalé aussi, s'il a un chemin ordinaire dans
+ * l'index de tag_manager (table tag_manager_paths : tag voulu, rangé dans l'arbre, hors des racines
+ * réservées aux visages). Sinon, en devenant un nom de visage, il entrerait dans le registre : Piwigo
+ * n'ayant qu'un tag par nom, le même tag désignerait la personne et le tag ordinaire (homonyme), et
+ * tag_manager le cacherait comme visage. Un tag sans photo et sans chemin (reste abandonné) reste accepté.
  *
  * Comparaison des noms par MySQL (mêmes règles que Piwigo). Le chemin du tag est pris, si possible,
  * dans les mots-clés hiérarchiques de la photo ouverte (lecture du seul segment XMP).
  *
- * @return array ('warn' => bool, 'count' => nb de photos, 'paths' => chemins trouvés dans la photo)
+ * @return array ('warn' => bool, 'count' => nb de photos, 'paths' => chemins trouvés dans la photo,
+ *                'nophoto' => bool (tag sans photo rangé dans tag_manager), 'tm_paths' => ses chemins,
+ *                'tag_names' => noms réels des tags trouvés s'ils s'écrivent autrement que le nom saisi)
+ *
+ * Le tag est cherché comme le fait Piwigo (tag_id_from_tag_name) : par nom, sinon par nom d'URL
+ * (2.5.3 : « @ macareux » et « macareux » sont le même tag pour Piwigo).
  */
 function face_tag_write_ws_check_name($params, &$service)
 {
@@ -1586,7 +1827,7 @@ function face_tag_write_ws_check_name($params, &$service)
   }
 
   $name = trim(stripslashes((string)$params['name']));
-  $result = array('warn' => false, 'count' => 0, 'paths' => array());
+  $result = array('warn' => false, 'count' => 0, 'paths' => array(), 'nophoto' => false, 'tm_paths' => array(), 'tag_names' => array());
   if ($name === '')
   {
     return $result;
@@ -1595,22 +1836,48 @@ function face_tag_write_ws_check_name($params, &$service)
   $registry = $prefixeTable . 'facetag_person_tags';
   $has_registry = (pwg_db_num_rows(pwg_query('SHOW TABLES LIKE \'' . pwg_db_real_escape_string($registry) . '\';')) > 0);
 
+  // 2.5.3 : tag que Piwigo associerait à ce nom, avec la même règle que tag_id_from_tag_name()
+  // (enregistrement de la modale, synchronisation des métadonnées) : nom (collation MySQL), sinon
+  // nom d'URL. Ex. « @ macareux » = tag « macareux » : Piwigo ne peut pas avoir les deux.
+  $where = 't.name = \'' . pwg_db_real_escape_string($name) . '\'';
+  if (count(query2array('SELECT id FROM ' . TAGS_TABLE . ' AS t WHERE ' . $where . ';')) === 0)
+  {
+    $where = 't.url_name = \'' . pwg_db_real_escape_string(trigger_change('render_tag_url', $name)) . '\'';
+  }
+
   $rows = query2array('
-SELECT t.id, COUNT(it.image_id) AS nb
+SELECT t.id, t.name, COUNT(it.image_id) AS nb
   FROM ' . TAGS_TABLE . ' AS t
   LEFT JOIN ' . IMAGE_TAG_TABLE . ' AS it ON it.tag_id = t.id
-  WHERE t.name = \'' . pwg_db_real_escape_string($name) . '\''
+  WHERE ' . $where
   . ($has_registry ? '
     AND t.id NOT IN (SELECT tag_id FROM ' . $registry . ' WHERE is_face_tag = 1)' : '') . '
-  GROUP BY t.id
+  GROUP BY t.id, t.name
 ;');
 
   foreach ($rows as $row)
   {
     $result['count'] += intval($row['nb']);
+    // Écriture différente du nom saisi (casse, accents, symboles) : la modale montre le tag réel
+    if ($row['name'] !== $name && !in_array($row['name'], $result['tag_names'], true))
+    {
+      $result['tag_names'][] = $row['name'];
+    }
   }
   if ($result['count'] === 0)
   {
+    // 2.5.3 : tag ordinaire sans photo, mais rangé dans l'arbre de tag_manager
+    $tag_ids = array();
+    foreach ($rows as $row)
+    {
+      $tag_ids[] = intval($row['id']);
+    }
+    $result['tm_paths'] = face_tag_write_tag_manager_paths($tag_ids);
+    if (!empty($result['tm_paths']))
+    {
+      $result['warn'] = true;
+      $result['nophoto'] = true;
+    }
     return $result;
   }
   $result['warn'] = true;
@@ -1773,10 +2040,21 @@ function facetag_ws_get_translations($params, &$service)
     'confirm_face_name_is_tag' => l10n('confirm_face_name_is_tag'),
     'confirm_face_name_is_tag_path' => l10n('confirm_face_name_is_tag_path'),
     'face_name_is_tag_blocked' => l10n('face_name_is_tag_blocked'),
+    'face_name_is_tag_nophoto' => l10n('face_name_is_tag_nophoto'),
+    'face_name_same_tag' => l10n('face_name_same_tag'),
     'Télécharger JPG' => l10n('Télécharger JPG'),
     'Télécharger l\'image avec les rectangles visibles' => l10n('Télécharger l\'image avec les rectangles visibles'),
     'Aucun visage tagué à télécharger' => l10n('Aucun visage tagué à télécharger'),
-    'Erreur lors de la génération de l\'image' => l10n('Erreur lors de la génération de l\'image')
+    'Erreur lors de la génération de l\'image' => l10n('Erreur lors de la génération de l\'image'),
+    // 2.5.4 : noms sans cadre
+    'Noms sans cadre' => l10n('Noms sans cadre'),
+    'unframed_help' => l10n('unframed_help'),
+    'nom sans zone' => l10n('nom sans zone'),
+    'mot-clé de personne' => l10n('mot-clé de personne'),
+    'aussi tag ordinaire (gardé)' => l10n('aussi tag ordinaire (gardé)'),
+    'cadre dessiné' => l10n('cadre dessiné'),
+    'Retirer' => l10n('Retirer'),
+    'Garder' => l10n('Garder')
   );
 
    return $translations;

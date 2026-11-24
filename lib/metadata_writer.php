@@ -271,7 +271,11 @@ class FaceTagMetadataWriterSimple
     // digiKam ecrit TagsList en Seq (liste ordonnee) : on respecte cette convention
     // par defaut, et on preserve le type existant si le champ etait deja present.
     $this->mergeListField($doc, $xpath, $desc, 'digiKam', 'TagsList', 'Seq', $tagslist);
-    $this->mergeListField($doc, $xpath, $desc, 'digiKam', 'CatalogSets', 'Bag', $catalogsets);
+    // 2.5.6 : digiKam:CatalogSets n'existe pas chez digiKam (le vrai champ est
+    // mediapro:CatalogSets, tenu par lib/secondary_keywords.php) ; seul ce writer l'ecrivait
+    // (31 photos sur 426 du site de dev, toutes ecrites par lui) : il n'est plus ecrit et
+    // l'ancien champ est retire. $catalogsets n'est plus utilise.
+    $this->removeDigikamCatalogSets($xpath);
 
     // IMPORTANT : face_tag_editor ET le plugin independant "face_tag" (affichage cote
     // galerie) lisent tous deux les tags de visage en scannant directement le PREMIER
@@ -282,7 +286,7 @@ class FaceTagMetadataWriterSimple
     // dans ce cas, on les place en TETE du document plutot qu'a la fin.
     $protectedTags = array(
       'MP:RegionInfo', 'mwg-rs:Regions', 'dc:subject',
-      'lr:hierarchicalSubject', 'digiKam:TagsList', 'digiKam:CatalogSets'
+      'lr:hierarchicalSubject', 'digiKam:TagsList'
     );
     $this->moveToFront($doc, $xpath, $desc, array_map(function($t) { return '//' . $t; }, $protectedTags));
 
@@ -323,29 +327,70 @@ class FaceTagMetadataWriterSimple
 
   /**
    * Retire, dans le texte XML deja serialise, les declarations xmlns:PREFIX="URI"
-   * redondantes pour les namespaces geres par le plugin (self::NS) : ne garde que la
-   * PREMIERE occurrence de chaque paire prefixe/URI (portee par rdf:Description, ou elle
-   * est necessaire et suffisante), retire toutes les suivantes, identiques mot pour mot.
-   * Le XML reste strictement equivalent pour un lecteur qui resout les namespaces par
-   * heritage (le prefixe reste declare une fois, en ancetre de tous ses usages), juste
-   * moins verbeux et sans attribut parasite sur les balises de contenu.
+   * redondantes pour les namespaces geres par le plugin (self::NS) : une declaration
+   * n'est retiree que si un ANCETRE declare deja le meme prefixe avec la meme URI.
+   * Le XML reste strictement equivalent, juste moins verbeux et sans attribut parasite
+   * sur les balises de contenu.
+   *
+   * 2.5.7 : jusqu'ici, toute occurrence apres la premiere du document etait retiree,
+   * meme dans un autre rdf:Description (frere, pas ancetre). Sur un XMP ecrit par
+   * ExifTool / digiKam actuel (un rdf:Description par espace de noms), le bloc qui
+   * gardait un champ non deplace (ex. digiKam:ColorLabel) perdait sa declaration :
+   * prefixe non defini, XMP invalide. Repare aussi un fichier deja abime : un prefixe
+   * de self::NS utilise sans declaration en portee est declare sur la balise.
    */
   private function stripRedundantNamespaceDeclarations($xml)
   {
-    foreach (self::NS as $prefix => $uri) {
-      $needle = ' xmlns:' . $prefix . '="' . $uri . '"';
-      $firstPos = strpos($xml, $needle);
-      if ($firstPos === false) {
-        continue;
+    $ours = self::NS;
+    $stack = array(array()); // prefixe => URI en portee, par niveau d'element ouvert
+    $out = preg_replace_callback('/<(?:"[^"]*"|\'[^\']*\'|[^\'">])*+>/', function ($m) use (&$stack, $ours) {
+      $tag = $m[0];
+      $c = substr($tag, 1, 1);
+      if ($c === '?' || $c === '!') {
+        return $tag; // instruction de traitement, commentaire, CDATA
       }
-      $searchFrom = $firstPos + strlen($needle);
-      while (($nextPos = strpos($xml, $needle, $searchFrom)) !== false) {
-        $xml = substr($xml, 0, $nextPos) . substr($xml, $nextPos + strlen($needle));
-        // $searchFrom inchange : on vient de retirer du texte APRES cette position,
-        // la prochaine occurrence eventuelle sera cherchee au meme endroit.
+      if ($c === '/') {
+        if (count($stack) > 1) {
+          array_pop($stack);
+        }
+        return $tag;
       }
-    }
-    return $xml;
+      $scope = end($stack);
+      $tag = preg_replace_callback('/\s+xmlns:([A-Za-z_][\w.-]*)=("[^"]*"|\'[^\']*\')/', function ($a) use (&$scope, $ours) {
+        $p = $a[1];
+        $u = substr($a[2], 1, -1);
+        if (isset($ours[$p]) && $ours[$p] === $u && isset($scope[$p]) && $scope[$p] === $u) {
+          return ''; // deja declare par un ancetre
+        }
+        $scope[$p] = $u;
+        return $a[0];
+      }, $tag);
+
+      // Prefixes de self::NS utilises par la balise (element ou attributs) sans declaration en portee
+      $used = array();
+      if (preg_match('/^<([A-Za-z_][\w.-]*):/', $tag, $e)) {
+        $used[] = $e[1];
+      }
+      if (preg_match_all('/\s([A-Za-z_][\w.-]*):[A-Za-z_][\w.-]*\s*=/', $tag, $at)) {
+        $used = array_merge($used, $at[1]);
+      }
+      $add = '';
+      foreach (array_unique($used) as $p) {
+        if ($p !== 'xmlns' && isset($ours[$p]) && !isset($scope[$p])) {
+          $add .= ' xmlns:' . $p . '="' . $ours[$p] . '"';
+          $scope[$p] = $ours[$p];
+        }
+      }
+      if ($add !== '') {
+        $tag = preg_replace('/^<[^\s\/>]+/', '$0' . $add, $tag);
+      }
+
+      if (substr($tag, -2) !== '/>') {
+        $stack[] = $scope;
+      }
+      return $tag;
+    }, $xml);
+    return ($out === null) ? $xml : $out;
   }
 
   /**
@@ -480,26 +525,80 @@ class FaceTagMetadataWriterSimple
   }
 
   /**
-   * Remplace (ou cree) MP:RegionInfo avec la liste actuelle de visages.
-   * Ce noeud est entierement possede par face_tag_editor/digiKam : un remplacement
-   * complet est correct ici (pas de fusion partielle a faire, $faces est deja la
-   * liste complete et a jour des visages de la photo).
+   * Indice, dans $faces, du cadre identique a $read (meme nom, meme zone a 0,0005 pres
+   * en coordonnees normalisees, tolerance pour les arrondis de l'aller-retour par l'editeur),
+   * ou null. Un cadre inchange garde ainsi sa region d'origine (2.5.1) : ses donnees annexes
+   * (Rotation, extensions CEWE ou digiKam...) ne sont pas perdues.
+   */
+  private function findSameFace($faces, $read)
+  {
+    foreach ($faces as $k => $face) {
+      if ((string)$face['name'] !== $read['name']) {
+        continue;
+      }
+      $same = true;
+      foreach (array('x', 'y', 'w', 'h') as $c) {
+        if (abs(floatval($face[$c]) - $read[$c]) > 0.0005) {
+          $same = false;
+          break;
+        }
+      }
+      if ($same) {
+        return $k;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Met a jour MP:RegionInfo avec la liste actuelle de visages.
+   * 2.5.1 : seules les regions lues comme cadres de visage par l'editeur
+   * (facetag_editor_mp_region_face(), lib/editor_xmp_ex.php) et modifiees ou supprimees
+   * dans l'editeur sont retirees ; les cadres modifies ou nouveaux sont ajoutes. Les autres
+   * regions (nom sans rectangle, rectangle sans nom...) sont conservees telles quelles. Jusqu'a 2.5, tout le noeud etait remplace :
+   * une region que l'editeur n'affichait pas etait perdue a l'enregistrement.
    */
   private function mergeRegionInfoMP($doc, $xpath, $desc, $faces)
   {
+    $xp = facetag_editor_regions_xpath($doc);
+    $faces = array_values($faces);
+    foreach (facetag_editor_mp_region_nodes($xp) as $li) {
+      $read = facetag_editor_mp_region_face($li);
+      if ($read === null) {
+        continue; // pas un cadre pour l'editeur : conserve
+      }
+      $k = $this->findSameFace($faces, $read);
+      if ($k !== null) {
+        unset($faces[$k]); // cadre inchange : la region reste telle quelle
+      } else {
+        $li->parentNode->removeChild($li);
+      }
+    }
+
+    // Conteneur a reutiliser : le premier MP:RegionInfo qui garde des regions ;
+    // ceux devenus vides sont retires (comme avant 2.5.1)
+    $bag = null;
     foreach (iterator_to_array($xpath->query('//MP:RegionInfo')) as $old) {
-      $old->parentNode->removeChild($old);
+      if (count(facetag_editor_mp_region_nodes($xp, $old)) === 0) {
+        $old->parentNode->removeChild($old);
+      } elseif ($bag === null) {
+        $bag = $xpath->query('.//MPRI:Regions/rdf:Bag | .//MPRI:Regions/rdf:Seq', $old)->item(0);
+      }
     }
 
     if (empty($faces)) {
-      return; // rien a ecrire, pas de visages
+      return; // plus aucun cadre a ajouter
     }
 
-    $regionInfo = $doc->createElementNS(self::NS['MP'], 'MP:RegionInfo');
-    $regionInfo->setAttributeNS(self::NS['rdf'], 'rdf:parseType', 'Resource');
-
-    $regions = $doc->createElementNS(self::NS['MPRI'], 'MPRI:Regions');
-    $bag = $doc->createElementNS(self::NS['rdf'], 'rdf:Bag');
+    if ($bag === null) {
+      $regionInfo = $doc->createElementNS(self::NS['MP'], 'MP:RegionInfo');
+      $regionInfo->setAttributeNS(self::NS['rdf'], 'rdf:parseType', 'Resource');
+      $regions = $doc->createElementNS(self::NS['MPRI'], 'MPRI:Regions');
+      $bag = $doc->createElementNS(self::NS['rdf'], 'rdf:Bag');
+      $regions->appendChild($bag);
+      $regionInfo->appendChild($regions);
+      $desc->appendChild($regionInfo);
+    }
 
     foreach ($faces as $face) {
       $topLeftX = $face['x'] - ($face['w'] / 2);
@@ -508,7 +607,8 @@ class FaceTagMetadataWriterSimple
       $li = $doc->createElementNS(self::NS['rdf'], 'rdf:li');
       $li->setAttributeNS(self::NS['rdf'], 'rdf:parseType', 'Resource');
 
-      $name = $doc->createElementNS(self::NS['MPReg'], 'MPReg:PersonDisplayName', $face['name']);
+      $name = $doc->createElementNS(self::NS['MPReg'], 'MPReg:PersonDisplayName');
+      $name->appendChild($doc->createTextNode($face['name']));
       $rect = $doc->createElementNS(self::NS['MPReg'], 'MPReg:Rectangle',
         number_format($topLeftX, 6, '.', '') . ', ' .
         number_format($topLeftY, 6, '.', '') . ', ' .
@@ -520,45 +620,80 @@ class FaceTagMetadataWriterSimple
       $li->appendChild($rect);
       $bag->appendChild($li);
     }
-
-    $regions->appendChild($bag);
-    $regionInfo->appendChild($regions);
-    $desc->appendChild($regionInfo);
   }
 
   /**
-   * Remplace (ou cree) mwg-rs:Regions avec la liste actuelle de visages.
-   * Meme logique que mergeRegionInfoMP : remplacement complet legitime.
+   * Met a jour mwg-rs:Regions avec la liste actuelle de visages.
+   * Meme logique que mergeRegionInfoMP (2.5.1) : seules les regions lues comme cadres
+   * (facetag_editor_mwg_region_face()) sont remplacees ; les visages non identifies
+   * (sans nom), les regions BarCode / Focus / Pet... sont conserves.
    */
   private function mergeMwgRegions($doc, $xpath, $desc, $faces, $width, $height)
   {
+    $xp = facetag_editor_regions_xpath($doc);
+    $faces = array_values($faces);
+    foreach (facetag_editor_mwg_region_nodes($xp) as $li) {
+      $read = facetag_editor_mwg_region_face($li);
+      if ($read === null) {
+        continue; // pas un cadre pour l'editeur : conserve
+      }
+      $k = $this->findSameFace($faces, $read);
+      if ($k !== null) {
+        unset($faces[$k]); // cadre inchange : la region reste telle quelle
+      } else {
+        $li->parentNode->removeChild($li);
+      }
+    }
+
+    $regionsEl = null;
+    $bag = null;
     foreach (iterator_to_array($xpath->query('//mwg-rs:Regions')) as $old) {
-      $old->parentNode->removeChild($old);
+      if (count(facetag_editor_mwg_region_nodes($xp, $old)) === 0) {
+        $old->parentNode->removeChild($old);
+      } elseif ($bag === null) {
+        $regionsEl = $old;
+        $bag = $xpath->query('.//mwg-rs:RegionList/rdf:Bag | .//mwg-rs:RegionList/rdf:Seq', $old)->item(0);
+      }
     }
 
     if (empty($faces)) {
       return;
     }
 
-    $regionsEl = $doc->createElementNS(self::NS['mwg-rs'], 'mwg-rs:Regions');
-    $regionsEl->setAttributeNS(self::NS['rdf'], 'rdf:parseType', 'Resource');
-
     $dims = $doc->createElementNS(self::NS['mwg-rs'], 'mwg-rs:AppliedToDimensions');
     $dims->setAttributeNS(self::NS['rdf'], 'rdf:parseType', 'Resource');
     $dims->appendChild($doc->createElementNS(self::NS['stDim'], 'stDim:w', $width));
     $dims->appendChild($doc->createElementNS(self::NS['stDim'], 'stDim:h', $height));
     $dims->appendChild($doc->createElementNS(self::NS['stDim'], 'stDim:unit', 'pixel'));
-    $regionsEl->appendChild($dims);
 
-    $regionList = $doc->createElementNS(self::NS['mwg-rs'], 'mwg-rs:RegionList');
-    $bag = $doc->createElementNS(self::NS['rdf'], 'rdf:Bag');
+    if ($bag === null) {
+      $regionsEl = $doc->createElementNS(self::NS['mwg-rs'], 'mwg-rs:Regions');
+      $regionsEl->setAttributeNS(self::NS['rdf'], 'rdf:parseType', 'Resource');
+      $regionsEl->appendChild($dims);
+      $regionList = $doc->createElementNS(self::NS['mwg-rs'], 'mwg-rs:RegionList');
+      $bag = $doc->createElementNS(self::NS['rdf'], 'rdf:Bag');
+      $regionList->appendChild($bag);
+      $regionsEl->appendChild($regionList);
+      $desc->appendChild($regionsEl);
+    } else {
+      // Regions conservees : dimensions de reference = image actuelle, comme avant
+      $oldDims = $xpath->query('.//mwg-rs:AppliedToDimensions', $regionsEl)->item(0);
+      if ($oldDims) {
+        $oldDims->parentNode->replaceChild($dims, $oldDims);
+      } else {
+        $regionList = $bag->parentNode;
+        $regionList->parentNode->insertBefore($dims, $regionList);
+      }
+    }
 
     foreach ($faces as $face) {
       $li = $doc->createElementNS(self::NS['rdf'], 'rdf:li');
       $li->setAttributeNS(self::NS['rdf'], 'rdf:parseType', 'Resource');
 
       $li->appendChild($doc->createElementNS(self::NS['mwg-rs'], 'mwg-rs:Type', 'Face'));
-      $li->appendChild($doc->createElementNS(self::NS['mwg-rs'], 'mwg-rs:Name', $face['name']));
+      $name = $doc->createElementNS(self::NS['mwg-rs'], 'mwg-rs:Name');
+      $name->appendChild($doc->createTextNode($face['name']));
+      $li->appendChild($name);
 
       $area = $doc->createElementNS(self::NS['mwg-rs'], 'mwg-rs:Area');
       $area->setAttributeNS(self::NS['rdf'], 'rdf:parseType', 'Resource');
@@ -571,15 +706,26 @@ class FaceTagMetadataWriterSimple
 
       $bag->appendChild($li);
     }
+  }
 
-    $regionList->appendChild($bag);
-    $regionsEl->appendChild($regionList);
-    $desc->appendChild($regionsEl);
+  /**
+   * 2.5.6 : retire tout digiKam:CatalogSets du document (element, ou attribut de
+   * rdf:Description), champ non standard ecrit autrefois par ce writer.
+   */
+  private function removeDigikamCatalogSets($xpath)
+  {
+    $dk = self::NS['digiKam'];
+    foreach (iterator_to_array($xpath->query('//*[local-name()="CatalogSets" and namespace-uri()="' . $dk . '"]')) as $node) {
+      $node->parentNode->removeChild($node);
+    }
+    foreach (iterator_to_array($xpath->query('//@*[local-name()="CatalogSets" and namespace-uri()="' . $dk . '"]')) as $attr) {
+      $attr->ownerElement->removeAttributeNode($attr);
+    }
   }
 
   /**
    * Remplace le contenu d'un champ liste (dc:subject, lr:hierarchicalSubject,
-   * digiKam:TagsList, digiKam:CatalogSets) en preservant :
+   * digiKam:TagsList) en preservant :
    * - le noeud lui-meme s'il existe deja ailleurs dans le document (peu importe
    *   sous quelle rdf:Description) plutot que d'en creer un doublon
    * - son type de conteneur d'origine (rdf:Seq vs rdf:Bag) si deja present ;
@@ -614,7 +760,9 @@ class FaceTagMetadataWriterSimple
     $container = $doc->createElementNS(self::NS['rdf'], 'rdf:' . $container_name);
 
     foreach ($values as $val) {
-      $li = $doc->createElementNS(self::NS['rdf'], 'rdf:li', $val);
+      // createTextNode : une valeur passee a createElementNS() n'est pas echappee (& -> vide)
+      $li = $doc->createElementNS(self::NS['rdf'], 'rdf:li');
+      $li->appendChild($doc->createTextNode($val));
       $container->appendChild($li);
     }
 
